@@ -22,9 +22,11 @@ export default function ScannerScreen({ navigation }) {
     console.log('SCAN BUTTON WAS PRESSED');
     console.log('================================');
 
-    if (!cameraRef.current) {
-      console.log('ERROR: Camera reference is null');
+    if (isTakingPicture) {
+      return;
+    }
 
+    if (!cameraRef.current) {
       Alert.alert(
         'Camera Not Ready',
         'The camera is not ready yet. Please wait a moment and try again.'
@@ -33,39 +35,30 @@ export default function ScannerScreen({ navigation }) {
       return;
     }
 
-    console.log('Camera reference exists.');
-    console.log('Starting photo capture...');
-
     try {
       setIsTakingPicture(true);
 
+      console.log('Taking picture...');
+
       const photo = await cameraRef.current.takePictureAsync({
         quality: 0.8,
+        skipProcessing: false,
       });
 
       console.log('PHOTO CAPTURED');
       console.log(photo);
 
       if (photo && photo.uri) {
-        console.log('PHOTO URI:', photo.uri);
         setCapturedImage(photo.uri);
-      } else {
-        console.log('ERROR: No photo URI returned');
 
-        Alert.alert(
-          'Capture Error',
-          'The camera did not return a photo.'
-        );
+        console.log('PHOTO URI:', photo.uri);
       }
     } catch (error) {
-      console.log('================================');
-      console.log('CAMERA ERROR');
-      console.log(error);
-      console.log('================================');
+      console.error('Camera capture error:', error);
 
       Alert.alert(
-        'Camera Error',
-        'Something went wrong while taking the picture.'
+        'Capture Failed',
+        'Unable to capture the photo. Please try again.'
       );
     } finally {
       setIsTakingPicture(false);
@@ -74,7 +67,49 @@ export default function ScannerScreen({ navigation }) {
 
   const retakePicture = () => {
     console.log('RETAKE BUTTON PRESSED');
+
     setCapturedImage(null);
+  };
+
+  const scanCapturedImage = () => {
+    if (!capturedImage) {
+      Alert.alert(
+        'No Photo',
+        'Please capture a photo before scanning.'
+      );
+
+      return;
+    }
+
+    /*
+      TEMPORARY MOCK RESPONSE
+
+      Later this will be replaced by:
+
+      identifyFace(capturedImage)
+
+      from services/api.js
+
+      The response structure already matches
+      Person 2's backend API contract.
+    */
+
+    const mockResponse = {
+      match: true,
+      suspect: {
+        suspect_id: 'S001',
+        name: 'Demo Suspect',
+        role: 'Demo Role',
+        confidence: 94.6,
+        wanted: true,
+      },
+      message: 'Match Found',
+    };
+
+    navigation.navigate('Result', {
+      response: mockResponse,
+      capturedImage: capturedImage,
+    });
   };
 
   // --------------------------------------------------
@@ -125,7 +160,7 @@ export default function ScannerScreen({ navigation }) {
   return (
     <View style={styles.container}>
 
-      {/* CAMERA */}
+      {/* Camera stays mounted */}
       <CameraView
         ref={cameraRef}
         style={styles.camera}
@@ -133,7 +168,7 @@ export default function ScannerScreen({ navigation }) {
         mode="picture"
       />
 
-      {/* CAPTURED IMAGE */}
+      {/* Captured photo */}
       {capturedImage && (
         <Image
           source={{ uri: capturedImage }}
@@ -142,8 +177,9 @@ export default function ScannerScreen({ navigation }) {
         />
       )}
 
-      {/* TOP INFORMATION */}
+      {/* Top section */}
       <View style={styles.topSection}>
+
         <Text style={styles.header}>
           CINTRA
         </Text>
@@ -153,30 +189,64 @@ export default function ScannerScreen({ navigation }) {
             ? 'Photo captured successfully'
             : "Position the person's face inside the frame"}
         </Text>
+
       </View>
 
-      {/* SCAN FRAME */}
+      {/* Face frame */}
       {!capturedImage && (
         <View style={styles.scanFrame} />
       )}
 
-      {/* BOTTOM BUTTON */}
+      {/* Bottom buttons */}
       <View style={styles.bottomSection}>
 
-        <TouchableOpacity
-          style={styles.scanButton}
-          onPress={capturedImage ? retakePicture : takePicture}
-          disabled={isTakingPicture}
-          activeOpacity={0.5}
-        >
-          <Text style={styles.scanButtonText}>
-            {isTakingPicture
-              ? 'CAPTURING...'
-              : capturedImage
-              ? 'RETAKE'
-              : 'SCAN'}
-          </Text>
-        </TouchableOpacity>
+        {capturedImage ? (
+
+          <View style={styles.buttonRow}>
+
+            {/* Retake */}
+            <TouchableOpacity
+              style={styles.secondaryButton}
+              onPress={retakePicture}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.secondaryButtonText}>
+                RETAKE
+              </Text>
+            </TouchableOpacity>
+
+            {/* Scan */}
+            <TouchableOpacity
+              style={styles.primaryButton}
+              onPress={scanCapturedImage}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.primaryButtonText}>
+                IDENTIFY
+              </Text>
+            </TouchableOpacity>
+
+          </View>
+
+        ) : (
+
+          <TouchableOpacity
+            style={[
+              styles.scanButton,
+              isTakingPicture && styles.disabledButton,
+            ]}
+            onPress={takePicture}
+            disabled={isTakingPicture}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.scanButtonText}>
+              {isTakingPicture
+                ? 'CAPTURING...'
+                : 'SCAN'}
+            </Text>
+          </TouchableOpacity>
+
+        )}
 
       </View>
 
@@ -249,6 +319,11 @@ const styles = StyleSheet.create({
     zIndex: 20,
   },
 
+  buttonRow: {
+    flexDirection: 'row',
+    gap: 15,
+  },
+
   scanButton: {
     width: 170,
     height: 60,
@@ -256,15 +331,49 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     alignItems: 'center',
     justifyContent: 'center',
-
-    // Make the button very obviously clickable
     elevation: 10,
+  },
+
+  primaryButton: {
+    width: 150,
+    height: 55,
+    borderRadius: 28,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 10,
+  },
+
+  secondaryButton: {
+    width: 130,
+    height: 55,
+    borderRadius: 28,
+    backgroundColor: '#333',
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 10,
+  },
+
+  disabledButton: {
+    opacity: 0.6,
   },
 
   scanButtonText: {
     fontSize: 18,
     fontWeight: 'bold',
     color: '#000',
+  },
+
+  primaryButtonText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#000',
+  },
+
+  secondaryButtonText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#fff',
   },
 
   centerContainer: {
