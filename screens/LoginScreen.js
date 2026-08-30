@@ -1,16 +1,33 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
   TextInput,
   TouchableOpacity,
   StyleSheet,
+  Alert,
 } from 'react-native';
+import { validateBadgeId } from '../services/authService';
 
 export default function LoginScreen({ navigation }) {
+  const [badgeId, setBadgeId] = useState('');
   const handleLogin = () => {
-    navigation.navigate('OTP');
-  };
+  const cleanedBadgeId = badgeId.trim();
+
+  if (!cleanedBadgeId) {
+    Alert.alert('Badge ID Required', 'Please enter your Badge ID.');
+    return;
+  }
+
+  if (!validateBadgeId(cleanedBadgeId)) {
+    Alert.alert('Access Denied', 'Invalid Badge ID.');
+    return;
+  }
+
+  navigation.navigate('OTP', {
+    badgeId: cleanedBadgeId,
+  });
+};
 
   return (
     <View style={styles.container}>
@@ -18,11 +35,14 @@ export default function LoginScreen({ navigation }) {
 
       <Text style={styles.subtitle}>Officer Login</Text>
 
-      <TextInput
-        style={styles.input}
-        placeholder="Enter Badge ID"
-        placeholderTextColor="#888"
-      />
+    <TextInput
+  style={styles.input}
+  placeholder="Enter Badge ID"
+  placeholderTextColor="#888"
+  value={badgeId}
+  onChangeText={setBadgeId}
+  autoCapitalize="characters"
+/>
 
       <TouchableOpacity
         style={styles.button}
