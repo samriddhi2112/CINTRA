@@ -6,8 +6,10 @@ import {
   TouchableOpacity,
   Image,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import { identifyFace } from '../services/api';
 
 export default function ScannerScreen({ navigation }) {
   const [permission, requestPermission] = useCameraPermissions();
@@ -16,13 +18,18 @@ export default function ScannerScreen({ navigation }) {
 
   const [capturedImage, setCapturedImage] = useState(null);
   const [isTakingPicture, setIsTakingPicture] = useState(false);
+  const [isIdentifying, setIsIdentifying] = useState(false);
+
+  // --------------------------------------------------
+  // TAKE PHOTO
+  // --------------------------------------------------
 
   const takePicture = async () => {
     console.log('================================');
     console.log('SCAN BUTTON WAS PRESSED');
     console.log('================================');
 
-    if (isTakingPicture) {
+    if (isTakingPicture || isIdentifying) {
       return;
     }
 
@@ -65,13 +72,25 @@ export default function ScannerScreen({ navigation }) {
     }
   };
 
+  // --------------------------------------------------
+  // RETAKE PHOTO
+  // --------------------------------------------------
+
   const retakePicture = () => {
     console.log('RETAKE BUTTON PRESSED');
+
+    if (isIdentifying) {
+      return;
+    }
 
     setCapturedImage(null);
   };
 
-  const scanCapturedImage = () => {
+  // --------------------------------------------------
+  // SEND PHOTO TO BACKEND
+  // --------------------------------------------------
+
+  const scanCapturedImage = async () => {
     if (!capturedImage) {
       Alert.alert(
         'No Photo',
@@ -81,35 +100,51 @@ export default function ScannerScreen({ navigation }) {
       return;
     }
 
-    /*
-      TEMPORARY MOCK RESPONSE
+    if (isIdentifying) {
+      return;
+    }
 
-      Later this will be replaced by:
+    try {
+      setIsIdentifying(true);
 
-      identifyFace(capturedImage)
+      console.log('================================');
+      console.log('IDENTIFY BUTTON WAS PRESSED');
+      console.log('================================');
 
-      from services/api.js
+      console.log('Sending image to backend...');
+      console.log('Image URI:', capturedImage);
 
-      The response structure already matches
-      Person 2's backend API contract.
-    */
+      const response = await identifyFace(capturedImage);
 
-    const mockResponse = {
-      match: true,
-      suspect: {
-        suspect_id: 'S001',
-        name: 'Demo Suspect',
-        role: 'Demo Role',
-        confidence: 94.6,
-        wanted: true,
-      },
-      message: 'Match Found',
-    };
+      console.log('BACKEND RESPONSE:');
+      console.log(response);
 
-    navigation.navigate('Result', {
-      response: mockResponse,
-      capturedImage: capturedImage,
-    });
+      /*
+        IMPORTANT:
+
+        We use response.match to determine whether
+        the person was matched.
+
+        We do NOT check:
+        response.message === "Match Found"
+      */
+
+      navigation.navigate('Result', {
+        response: response,
+        capturedImage: capturedImage,
+      });
+
+    } catch (error) {
+      console.error('IDENTIFICATION ERROR:', error);
+
+      Alert.alert(
+        'Identification Failed',
+        error.message ||
+          'Could not connect to the identification server.'
+      );
+    } finally {
+      setIsIdentifying(false);
+    }
   };
 
   // --------------------------------------------------
@@ -160,7 +195,7 @@ export default function ScannerScreen({ navigation }) {
   return (
     <View style={styles.container}>
 
-      {/* Camera stays mounted */}
+      {/* Live camera */}
       <CameraView
         ref={cameraRef}
         style={styles.camera}
@@ -168,7 +203,7 @@ export default function ScannerScreen({ navigation }) {
         mode="picture"
       />
 
-      {/* Captured photo */}
+      {/* Captured image */}
       {capturedImage && (
         <Image
           source={{ uri: capturedImage }}
@@ -185,7 +220,9 @@ export default function ScannerScreen({ navigation }) {
         </Text>
 
         <Text style={styles.instruction}>
-          {capturedImage
+          {isIdentifying
+            ? 'Identifying...'
+            : capturedImage
             ? 'Photo captured successfully'
             : "Position the person's face inside the frame"}
         </Text>
@@ -197,6 +234,30 @@ export default function ScannerScreen({ navigation }) {
         <View style={styles.scanFrame} />
       )}
 
+      {/* Identification loading overlay */}
+      {isIdentifying && (
+        <View style={styles.loadingOverlay}>
+
+          <View style={styles.loadingCard}>
+
+            <ActivityIndicator
+              size="large"
+              color="#000"
+            />
+
+            <Text style={styles.loadingTitle}>
+              IDENTIFYING
+            </Text>
+
+            <Text style={styles.loadingMessage}>
+              Please wait while CINTRA processes the image.
+            </Text>
+
+          </View>
+
+        </View>
+      )}
+
       {/* Bottom buttons */}
       <View style={styles.bottomSection}>
 
@@ -206,8 +267,12 @@ export default function ScannerScreen({ navigation }) {
 
             {/* Retake */}
             <TouchableOpacity
-              style={styles.secondaryButton}
+              style={[
+                styles.secondaryButton,
+                isIdentifying && styles.disabledButton,
+              ]}
               onPress={retakePicture}
+              disabled={isIdentifying}
               activeOpacity={0.7}
             >
               <Text style={styles.secondaryButtonText}>
@@ -215,14 +280,20 @@ export default function ScannerScreen({ navigation }) {
               </Text>
             </TouchableOpacity>
 
-            {/* Scan */}
+            {/* Identify */}
             <TouchableOpacity
-              style={styles.primaryButton}
+              style={[
+                styles.primaryButton,
+                isIdentifying && styles.disabledButton,
+              ]}
               onPress={scanCapturedImage}
+              disabled={isIdentifying}
               activeOpacity={0.7}
             >
               <Text style={styles.primaryButtonText}>
-                IDENTIFY
+                {isIdentifying
+                  ? 'IDENTIFYING...'
+                  : 'IDENTIFY'}
               </Text>
             </TouchableOpacity>
 
@@ -407,6 +478,36 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+
+  loadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 15,
+  },
+
+  loadingCard: {
+    width: '80%',
+    backgroundColor: '#fff',
+    borderRadius: 15,
+    padding: 25,
+    alignItems: 'center',
+  },
+
+  loadingTitle: {
+    marginTop: 15,
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#000',
+  },
+
+  loadingMessage: {
+    marginTop: 8,
+    fontSize: 14,
+    textAlign: 'center',
+    color: '#555',
   },
 
 });
