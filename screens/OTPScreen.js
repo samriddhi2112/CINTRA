@@ -1,5 +1,4 @@
-
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -9,7 +8,12 @@ import {
   Alert,
 } from 'react-native';
 
-import { verifyOTP } from '../services/authService';
+import {
+  verifyOTP,
+  login,
+  isAuthenticated,
+  updateActivity,
+} from '../services/authService';
 
 export default function OTPScreen({ navigation, route }) {
   const [otp, setOtp] = useState('');
@@ -17,8 +21,40 @@ export default function OTPScreen({ navigation, route }) {
 
   const badgeId = route?.params?.badgeId;
 
+  // --------------------
+  // Session check
+  // --------------------
+
+  useEffect(() => {
+    // OTP screen is before login authentication,
+    // so do not require isAuthenticated() here.
+    // The officer becomes authenticated only after
+    // successful OTP verification.
+  }, []);
+
+  // --------------------
+  // OTP input activity
+  // --------------------
+
+  const handleOTPChange = (value) => {
+    setOtp(value);
+
+    // If a session already exists, record activity.
+    if (isAuthenticated()) {
+      updateActivity();
+    }
+  };
+
+  // --------------------
+  // OTP verification
+  // --------------------
+
   const handleVerify = () => {
-    // Stop verification if the user has already used 3 attempts
+    if (isAuthenticated()) {
+      updateActivity();
+    }
+
+    // Stop verification after 3 failed attempts
     if (attempts >= 3) {
       Alert.alert(
         'Access Blocked',
@@ -27,7 +63,7 @@ export default function OTPScreen({ navigation, route }) {
       return;
     }
 
-    // OTP must contain exactly 6 digits
+    // Validate OTP format
     if (!/^\d{6}$/.test(otp)) {
       Alert.alert(
         'Invalid OTP',
@@ -36,9 +72,10 @@ export default function OTPScreen({ navigation, route }) {
       return;
     }
 
-    // Check OTP using the authentication service
+    // Verify OTP
     if (!verifyOTP(otp)) {
       const newAttempts = attempts + 1;
+
       setAttempts(newAttempts);
 
       if (newAttempts >= 3) {
@@ -49,7 +86,9 @@ export default function OTPScreen({ navigation, route }) {
       } else {
         Alert.alert(
           'Incorrect OTP',
-          `You have ${3 - newAttempts} attempt(s) remaining.`
+          `You have ${
+            3 - newAttempts
+          } attempt(s) remaining.`
         );
       }
 
@@ -57,15 +96,24 @@ export default function OTPScreen({ navigation, route }) {
       return;
     }
 
-    // OTP is correct
-    navigation.navigate('Scanner', {
-      badgeId: badgeId,
-    });
+    // Successful authentication
+    login(badgeId);
+
+    navigation.replace('Home');
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Verify OTP</Text>
+    <View
+      style={styles.container}
+      onTouchStart={() => {
+        if (isAuthenticated()) {
+          updateActivity();
+        }
+      }}
+    >
+      <Text style={styles.title}>
+        Verify OTP
+      </Text>
 
       <Text style={styles.subtitle}>
         Enter the OTP sent to your registered device
@@ -78,15 +126,28 @@ export default function OTPScreen({ navigation, route }) {
         keyboardType="numeric"
         maxLength={6}
         value={otp}
-        onChangeText={setOtp}
+        onChangeText={handleOTPChange}
       />
 
       <TouchableOpacity
-        style={styles.button}
+        style={[
+          styles.button,
+          attempts >= 3 &&
+            styles.disabledButton,
+        ]}
         onPress={handleVerify}
+        disabled={attempts >= 3}
       >
-        <Text style={styles.buttonText}>VERIFY</Text>
+        <Text style={styles.buttonText}>
+          VERIFY
+        </Text>
       </TouchableOpacity>
+
+      {attempts > 0 && attempts < 3 && (
+        <Text style={styles.attemptText}>
+          Failed attempts: {attempts}/3
+        </Text>
+      )}
     </View>
   );
 }
@@ -131,10 +192,20 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
 
+  disabledButton: {
+    opacity: 0.5,
+  },
+
   buttonText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+
+  attemptText: {
+    marginTop: 12,
+    color: '#c62828',
+    fontSize: 14,
   },
 });
 

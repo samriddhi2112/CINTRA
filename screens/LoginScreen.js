@@ -7,48 +7,72 @@ import {
   StyleSheet,
   Alert,
 } from 'react-native';
-import { validateBadgeId } from '../services/authService';
+
+import {
+  validateBadgeId,
+  logout,
+} from '../services/authService';
 
 export default function LoginScreen({ navigation }) {
   const [badgeId, setBadgeId] = useState('');
+
   const handleLogin = () => {
-  const cleanedBadgeId = badgeId.trim();
+    const cleanedBadgeId = badgeId.trim();
 
-  if (!cleanedBadgeId) {
-    Alert.alert('Badge ID Required', 'Please enter your Badge ID.');
-    return;
-  }
+    // Make sure no previous session remains
+    logout();
 
-  if (!validateBadgeId(cleanedBadgeId)) {
-    Alert.alert('Access Denied', 'Invalid Badge ID.');
-    return;
-  }
+    // Badge ID required
+    if (!cleanedBadgeId) {
+      Alert.alert(
+        'Badge ID Required',
+        'Please enter your Badge ID.'
+      );
+      return;
+    }
 
-  navigation.navigate('OTP', {
-    badgeId: cleanedBadgeId,
-  });
-};
+    // Validate Badge ID
+    if (!validateBadgeId(cleanedBadgeId)) {
+      Alert.alert(
+        'Access Denied',
+        'Invalid Badge ID.'
+      );
+      return;
+    }
+
+    // Move to OTP verification
+    navigation.navigate('OTP', {
+      badgeId: cleanedBadgeId,
+    });
+  };
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>CINTRA</Text>
+      <Text style={styles.title}>
+        CINTRA
+      </Text>
 
-      <Text style={styles.subtitle}>Officer Login</Text>
+      <Text style={styles.subtitle}>
+        Officer Login
+      </Text>
 
-    <TextInput
-  style={styles.input}
-  placeholder="Enter Badge ID"
-  placeholderTextColor="#888"
-  value={badgeId}
-  onChangeText={setBadgeId}
-  autoCapitalize="characters"
-/>
+      <TextInput
+        style={styles.input}
+        placeholder="Enter Badge ID"
+        placeholderTextColor="#888"
+        value={badgeId}
+        onChangeText={setBadgeId}
+        autoCapitalize="characters"
+        autoCorrect={false}
+      />
 
       <TouchableOpacity
         style={styles.button}
         onPress={handleLogin}
       >
-        <Text style={styles.buttonText}>LOGIN</Text>
+        <Text style={styles.buttonText}>
+          LOGIN
+        </Text>
       </TouchableOpacity>
     </View>
   );
@@ -99,3 +123,4 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
 });
+
