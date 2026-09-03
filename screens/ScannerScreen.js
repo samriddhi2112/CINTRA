@@ -19,8 +19,6 @@ import {
   useCameraPermissions,
 } from 'expo-camera';
 
-import { identifyFace } from '../services/api';
-
 import {
   isAuthenticated,
   logout,
@@ -52,16 +50,7 @@ export default function ScannerScreen({ navigation }) {
   const [isTakingPicture, setIsTakingPicture] =
     useState(false);
 
-  const [isIdentifying, setIsIdentifying] =
-    useState(false);
-
   const cameraRef = useRef(null);
-
-  // Prevent session checker from running after manual logout
-  const loggingOut = useRef(false);
-
-  // Prevent repeated session-expired alerts
-  const sessionExpiredShown = useRef(false);
 
 
   // --------------------------------------------------
@@ -69,6 +58,7 @@ export default function ScannerScreen({ navigation }) {
   // --------------------------------------------------
 
   useEffect(() => {
+
     if (!permission) {
       return;
     }
@@ -76,82 +66,8 @@ export default function ScannerScreen({ navigation }) {
     if (!permission.granted) {
       requestPermission();
     }
+
   }, [permission]);
-
-
-  // --------------------------------------------------
-  // SESSION MONITORING
-  // --------------------------------------------------
-
-  useEffect(() => {
-
-    const checkSession = () => {
-
-      // User intentionally logged out
-      if (loggingOut.current) {
-        return;
-      }
-
-      // Session is still valid
-      if (isAuthenticated()) {
-        return;
-      }
-
-      // Prevent multiple expiration popups
-      if (sessionExpiredShown.current) {
-        return;
-      }
-
-      sessionExpiredShown.current = true;
-
-      Alert.alert(
-        'Session Expired',
-        'You have been logged out due to inactivity.',
-        [
-          {
-            text: 'OK',
-            onPress: () => {
-              navigation.replace('Login');
-            },
-          },
-        ],
-        {
-          cancelable: false,
-        }
-      );
-    };
-
-
-    // Check immediately
-    checkSession();
-
-    // Then check every second
-    const interval = setInterval(
-      checkSession,
-      1000
-    );
-
-    return () => {
-      clearInterval(interval);
-    };
-
-  }, [navigation]);
-
-
-  // --------------------------------------------------
-  // USER ACTIVITY
-  // --------------------------------------------------
-
-  const handleScreenActivity = () => {
-
-    if (loggingOut.current) {
-      return;
-    }
-
-    if (isAuthenticated()) {
-      updateActivity();
-    }
-  };
 
 
   // --------------------------------------------------
@@ -160,17 +76,16 @@ export default function ScannerScreen({ navigation }) {
 
   const takePicture = async () => {
 
-    handleScreenActivity();
-
     if (!isAuthenticated()) {
       return;
     }
 
-    if (isTakingPicture || isIdentifying) {
+    if (isTakingPicture) {
       return;
     }
 
     if (!cameraRef.current) {
+
       Alert.alert(
         'Camera Not Ready',
         'The camera is not ready yet. Please wait a moment and try again.'
@@ -180,6 +95,7 @@ export default function ScannerScreen({ navigation }) {
     }
 
     if (!cameraReady) {
+
       Alert.alert(
         'Camera Not Ready',
         'Please wait for the camera to initialize.'
@@ -199,30 +115,41 @@ export default function ScannerScreen({ navigation }) {
         });
 
       if (!photo || !photo.uri) {
-        throw new Error(
-          'No photo was captured.'
-        );
+        throw new Error('No photo was captured.');
       }
 
       setCapturedImage(photo.uri);
 
+
       // Generate SHA-256 hash
+
       const sha256 =
         await calculateSHA256(photo.uri);
+
+
+      // Get logged-in officer
 
       const currentUser =
         getCurrentUser();
 
+
       // Create evidence metadata
+
       const evidence = {
+
         uri: photo.uri,
+
         sha256: sha256,
+
         badgeId:
           currentUser?.badgeId ||
           'Unknown',
+
         capturedAt:
           new Date().toISOString(),
+
       };
+
 
       setCapturedEvidence(evidence);
 
@@ -254,121 +181,32 @@ export default function ScannerScreen({ navigation }) {
 
   const retakePicture = () => {
 
-    handleScreenActivity();
-
-    if (isIdentifying) {
-      return;
-    }
-
     setCapturedImage(null);
+
     setCapturedEvidence(null);
+
     setCameraReady(false);
+
   };
 
 
   // --------------------------------------------------
-  // SEND PHOTO TO BACKEND
-  // --------------------------------------------------
-
-  const scanCapturedImage = async () => {
-
-    handleScreenActivity();
-
-    if (!isAuthenticated()) {
-      return;
-    }
-
-    if (!capturedImage) {
-      Alert.alert(
-        'No Photo',
-        'Please capture a photo before scanning.'
-      );
-
-      return;
-    }
-
-    if (isIdentifying) {
-      return;
-    }
-
-    try {
-
-      setIsIdentifying(true);
-
-      console.log(
-        'Sending image to backend...'
-      );
-
-      console.log(
-        'Image URI:',
-        capturedImage
-      );
-
-      const response =
-        await identifyFace(
-          capturedImage
-        );
-
-      console.log(
-        'BACKEND RESPONSE:',
-        response
-      );
-
-      updateActivity();
-
-      /*
-        Pass BOTH:
-
-        1. Backend identification response
-        2. Evidence metadata containing SHA-256
-
-        This allows ResultScreen to display
-        suspect information AND verify evidence
-        integrity.
-      */
-
-      navigation.navigate('Result', {
-        response: response,
-        capturedImage: capturedImage,
-        evidence: capturedEvidence,
-      });
-
-    } catch (error) {
-
-      console.error(
-        'IDENTIFICATION ERROR:',
-        error
-      );
-
-      Alert.alert(
-        'Identification Failed',
-        error.message ||
-          'Could not connect to the identification server.'
-      );
-
-    } finally {
-
-      setIsIdentifying(false);
-
-    }
-  };
-
-
-  // --------------------------------------------------
-  // MANUAL LOGOUT
+  // LOGOUT
   // --------------------------------------------------
 
   const handleLogout = () => {
 
-    // Tell session checker this is intentional logout
-    loggingOut.current = true;
-
-    // Prevent expiration popup
-    sessionExpiredShown.current = true;
-
     logout();
 
-    navigation.replace('Login');
+    navigation.reset({
+      index: 0,
+      routes: [
+        {
+          name: 'Login',
+        },
+      ],
+    });
+
   };
 
 
@@ -379,6 +217,7 @@ export default function ScannerScreen({ navigation }) {
   if (!permission) {
 
     return (
+
       <View style={styles.centerContainer}>
 
         <ActivityIndicator
@@ -402,6 +241,7 @@ export default function ScannerScreen({ navigation }) {
   if (!permission.granted) {
 
     return (
+
       <View style={styles.centerContainer}>
 
         <Ionicons
@@ -419,10 +259,12 @@ export default function ScannerScreen({ navigation }) {
           to capture evidence.
         </Text>
 
+
         <TouchableOpacity
           style={styles.permissionButton}
           onPress={requestPermission}
         >
+
           <Ionicons
             name="camera"
             size={21}
@@ -435,10 +277,12 @@ export default function ScannerScreen({ navigation }) {
 
         </TouchableOpacity>
 
+
         <TouchableOpacity
           style={styles.logoutButton}
           onPress={handleLogout}
         >
+
           <Ionicons
             name="log-out"
             size={21}
@@ -461,10 +305,8 @@ export default function ScannerScreen({ navigation }) {
   // --------------------------------------------------
 
   return (
-    <View
-      style={styles.container}
-      onTouchStart={handleScreenActivity}
-    >
+
+    <View style={styles.container}>
 
       {/* Live Camera */}
 
@@ -478,9 +320,11 @@ export default function ScannerScreen({ navigation }) {
         }
       />
 
+
       {/* Captured Image */}
 
       {capturedImage && (
+
         <Image
           source={{
             uri: capturedImage,
@@ -488,6 +332,7 @@ export default function ScannerScreen({ navigation }) {
           style={styles.capturedImage}
           resizeMode="cover"
         />
+
       )}
 
 
@@ -498,6 +343,7 @@ export default function ScannerScreen({ navigation }) {
           capturedEvidence?.badgeId ||
           getCurrentUser()?.badgeId
         }
+
         capturedAt={
           capturedEvidence?.capturedAt
         }
@@ -509,11 +355,13 @@ export default function ScannerScreen({ navigation }) {
       <View style={styles.topSection}>
 
         <View style={styles.headerIcon}>
+
           <Ionicons
             name="shield-checkmark"
             size={24}
             color="#FFFFFF"
           />
+
         </View>
 
         <Text style={styles.header}>
@@ -521,11 +369,11 @@ export default function ScannerScreen({ navigation }) {
         </Text>
 
         <Text style={styles.instruction}>
-          {isIdentifying
-            ? 'Identifying...'
-            : capturedImage
+
+          {capturedImage
             ? 'Photo captured successfully'
             : "Position the person's face inside the frame"}
+
         </Text>
 
       </View>
@@ -534,41 +382,19 @@ export default function ScannerScreen({ navigation }) {
       {/* Face Frame */}
 
       {!capturedImage && (
+
         <View style={styles.scanFrame}>
 
           <View style={styles.cornerTopLeft} />
+
           <View style={styles.cornerTopRight} />
+
           <View style={styles.cornerBottomLeft} />
+
           <View style={styles.cornerBottomRight} />
 
         </View>
-      )}
 
-
-      {/* Identification Loading */}
-
-      {isIdentifying && (
-        <View style={styles.loadingOverlay}>
-
-          <View style={styles.loadingCard}>
-
-            <ActivityIndicator
-              size="large"
-              color="#1976D2"
-            />
-
-            <Text style={styles.loadingTitle}>
-              IDENTIFYING
-            </Text>
-
-            <Text style={styles.loadingMessage}>
-              Please wait while CINTRA
-              processes the image.
-            </Text>
-
-          </View>
-
-        </View>
       )}
 
 
@@ -578,68 +404,29 @@ export default function ScannerScreen({ navigation }) {
 
         {capturedImage ? (
 
-          <View style={styles.buttonRow}>
+          // Only RETAKE remains after capture
 
-            {/* Retake */}
+          <TouchableOpacity
+            style={styles.secondaryButton}
+            onPress={retakePicture}
+            activeOpacity={0.7}
+          >
 
-            <TouchableOpacity
-              style={[
-                styles.secondaryButton,
-                isIdentifying &&
-                  styles.disabledButton,
-              ]}
-              onPress={retakePicture}
-              disabled={isIdentifying}
-              activeOpacity={0.7}
-            >
+            <Ionicons
+              name="refresh"
+              size={21}
+              color="#1976D2"
+            />
 
-              <Ionicons
-                name="refresh"
-                size={21}
-                color="#1976D2"
-              />
+            <Text style={styles.secondaryButtonText}>
+              RETAKE
+            </Text>
 
-              <Text
-                style={styles.secondaryButtonText}
-              >
-                RETAKE
-              </Text>
-
-            </TouchableOpacity>
-
-
-            {/* Identify */}
-
-            <TouchableOpacity
-              style={[
-                styles.primaryButton,
-                isIdentifying &&
-                  styles.disabledButton,
-              ]}
-              onPress={scanCapturedImage}
-              disabled={isIdentifying}
-              activeOpacity={0.7}
-            >
-
-              <Ionicons
-                name="scan"
-                size={21}
-                color="#FFFFFF"
-              />
-
-              <Text
-                style={styles.primaryButtonText}
-              >
-                {isIdentifying
-                  ? 'IDENTIFYING...'
-                  : 'IDENTIFY'}
-              </Text>
-
-            </TouchableOpacity>
-
-          </View>
+          </TouchableOpacity>
 
         ) : (
+
+          // SCAN / CAPTURE button
 
           <TouchableOpacity
             style={[
@@ -663,9 +450,11 @@ export default function ScannerScreen({ navigation }) {
             />
 
             <Text style={styles.scanButtonText}>
+
               {isTakingPicture
                 ? 'CAPTURING...'
                 : 'SCAN'}
+
             </Text>
 
           </TouchableOpacity>
@@ -819,11 +608,6 @@ const styles = StyleSheet.create({
     zIndex: 20,
   },
 
-  buttonRow: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-
   scanButton: {
     width: 180,
     height: 60,
@@ -835,19 +619,8 @@ const styles = StyleSheet.create({
     elevation: 10,
   },
 
-  primaryButton: {
-    width: 150,
-    height: 55,
-    borderRadius: 28,
-    backgroundColor: '#1976D2',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    elevation: 10,
-  },
-
   secondaryButton: {
-    width: 130,
+    width: 160,
     height: 55,
     borderRadius: 28,
     backgroundColor: '#FFFFFF',
@@ -868,48 +641,11 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
 
-  primaryButtonText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-    marginLeft: 7,
-  },
-
   secondaryButtonText: {
     fontSize: 16,
     fontWeight: 'bold',
     color: '#1976D2',
     marginLeft: 7,
-  },
-
-  loadingOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.55)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 15,
-  },
-
-  loadingCard: {
-    width: '80%',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 15,
-    padding: 25,
-    alignItems: 'center',
-  },
-
-  loadingTitle: {
-    marginTop: 15,
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#1976D2',
-  },
-
-  loadingMessage: {
-    marginTop: 8,
-    fontSize: 14,
-    textAlign: 'center',
-    color: '#555',
   },
 
   centerContainer: {

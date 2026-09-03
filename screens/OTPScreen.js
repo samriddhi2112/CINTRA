@@ -67,7 +67,7 @@ export default function OTPScreen({ navigation, route }) {
     if (!/^\d{6}$/.test(otp)) {
       Alert.alert(
         'Invalid OTP',
-        'OTP must contain exactly 6 digits (Demo OTP: 123456).'
+        'OTP must contain exactly 6 digits.'
       );
       return;
     }
@@ -86,7 +86,7 @@ export default function OTPScreen({ navigation, route }) {
       } else {
         Alert.alert(
           'Incorrect OTP',
-          `Demo OTP is 123456. You have ${
+          ` You have ${
             3 - newAttempts
           } attempt(s) remaining.`
         );
@@ -116,7 +116,7 @@ export default function OTPScreen({ navigation, route }) {
       </Text>
 
       <Text style={styles.subtitle}>
-        Enter the 6-digit OTP sent to your device (Demo: 123456)
+        Enter the 6-digit OTP sent to your device
       </Text>
 
       <TextInput

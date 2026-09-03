@@ -1,30 +1,51 @@
 const DEMO_BADGE_ID = 'OFF001';
-const DEMO_OTP = '123456';
 
 const SESSION_TIMEOUT = 60 * 1000; // 60 seconds
+const OTP_TIMEOUT = 60 * 1000; // 60 seconds
 
 let currentUser = null;
 let lastActivityTime = null;
 
-// --------------------
-// Badge ID validation
-// --------------------
+let currentOTP = null;
+let otpGeneratedTime = null;
 
 export const validateBadgeId = (badgeId) => {
   return badgeId === DEMO_BADGE_ID;
 };
 
-// --------------------
-// OTP verification
-// --------------------
+export const generateOTP = () => {
+  const otp = Math.floor(
+    100000 + Math.random() * 900000
+  ).toString();
 
-export const verifyOTP = (otp) => {
-  return otp === DEMO_OTP;
+  currentOTP = otp;
+  otpGeneratedTime = Date.now();
+
+  return otp;
 };
 
-// --------------------
-// Login
-// --------------------
+export const verifyOTP = (otp) => {
+  if (!currentOTP || !otpGeneratedTime) {
+    return false;
+  }
+
+  if (Date.now() - otpGeneratedTime >= OTP_TIMEOUT) {
+    currentOTP = null;
+    otpGeneratedTime = null;
+    return false;
+  }
+
+  if (otp !== currentOTP) {
+    return false;
+  }
+
+  // OTP can only be used once
+  currentOTP = null;
+  otpGeneratedTime = null;
+
+  return true;
+};
+
 
 export const login = (badgeId) => {
   currentUser = {
@@ -34,28 +55,18 @@ export const login = (badgeId) => {
   lastActivityTime = Date.now();
 };
 
-// --------------------
-// Logout
-// --------------------
-
 export const logout = () => {
   currentUser = null;
   lastActivityTime = null;
+  currentOTP = null;
+  otpGeneratedTime = null;
 };
-
-// --------------------
-// Update activity
-// --------------------
 
 export const updateActivity = () => {
   if (currentUser !== null) {
     lastActivityTime = Date.now();
   }
 };
-
-// --------------------
-// Authentication check
-// --------------------
 
 export const isAuthenticated = () => {
   if (currentUser === null) {
@@ -78,17 +89,10 @@ export const isAuthenticated = () => {
   return true;
 };
 
-// --------------------
-// Get current user
-// --------------------
 
 export const getCurrentUser = () => {
   return currentUser;
 };
-
-// --------------------
-// Get remaining session time
-// --------------------
 
 export const getRemainingSessionTime = () => {
   if (
