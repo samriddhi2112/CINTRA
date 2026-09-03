@@ -32,9 +32,10 @@ def _models_available() -> bool:
 def _detect_one(detector, image):
     detector.setInputSize((image.shape[1], image.shape[0]))
     _status, faces = detector.detect(image)
-    if faces is None or len(faces) != 1:
+    if faces is None or len(faces) == 0:
         return None
-    return faces[0]
+    # Pick the largest primary face by area (w * h)
+    return max(faces, key=lambda f: f[2] * f[3])
 
 
 def _feature(recognizer, image, face):
