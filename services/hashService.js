@@ -49,4 +49,3 @@ export const verifySHA256 = async (fileUri, originalHash) => {
     recalculatedHash: normalizedRecalculatedHash,
   };
 };
-

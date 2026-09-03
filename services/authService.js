@@ -67,7 +67,8 @@ export const isAuthenticated = () => {
     return false;
   }
 
-  const inactiveTime = Date.now() - lastActivityTime;
+  const inactiveTime =
+    Date.now() - lastActivityTime;
 
   if (inactiveTime >= SESSION_TIMEOUT) {
     logout();
@@ -90,13 +91,18 @@ export const getCurrentUser = () => {
 // --------------------
 
 export const getRemainingSessionTime = () => {
-  if (currentUser === null || lastActivityTime === null) {
+  if (
+    currentUser === null ||
+    lastActivityTime === null
+  ) {
     return 0;
   }
 
-  const elapsed = Date.now() - lastActivityTime;
-  const remaining = SESSION_TIMEOUT - elapsed;
+  const elapsed =
+    Date.now() - lastActivityTime;
+
+  const remaining =
+    SESSION_TIMEOUT - elapsed;
 
   return Math.max(0, remaining);
 };
-

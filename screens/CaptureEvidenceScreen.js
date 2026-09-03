@@ -61,7 +61,10 @@ export default function CaptureEvidenceScreen({ navigation }) {
       </View>
 
       {/* Capture Button */}
-      <TouchableOpacity style={styles.captureButton}>
+      <TouchableOpacity
+        style={styles.captureButton}
+        onPress={() => navigation.navigate('Scanner')}
+      >
         <Ionicons
           name="camera"
           size={22}
@@ -201,4 +204,3 @@ const styles = StyleSheet.create({
   },
 
 });
-

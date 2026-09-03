@@ -67,7 +67,7 @@ export default function OTPScreen({ navigation, route }) {
     if (!/^\d{6}$/.test(otp)) {
       Alert.alert(
         'Invalid OTP',
-        'OTP must contain exactly 6 digits.'
+        'OTP must contain exactly 6 digits (Demo OTP: 123456).'
       );
       return;
     }
@@ -86,7 +86,7 @@ export default function OTPScreen({ navigation, route }) {
       } else {
         Alert.alert(
           'Incorrect OTP',
-          `You have ${
+          `Demo OTP is 123456. You have ${
             3 - newAttempts
           } attempt(s) remaining.`
         );
@@ -116,12 +116,12 @@ export default function OTPScreen({ navigation, route }) {
       </Text>
 
       <Text style={styles.subtitle}>
-        Enter the OTP sent to your registered device
+        Enter the 6-digit OTP sent to your device (Demo: 123456)
       </Text>
 
       <TextInput
         style={styles.input}
-        placeholder="Enter OTP"
+        placeholder="Enter 6-digit OTP"
         placeholderTextColor="#888"
         keyboardType="numeric"
         maxLength={6}
@@ -165,12 +165,14 @@ const styles = StyleSheet.create({
     fontSize: 30,
     fontWeight: 'bold',
     marginBottom: 15,
+    color: '#1976D2',
   },
 
   subtitle: {
     textAlign: 'center',
     marginBottom: 30,
     color: '#555',
+    fontSize: 14,
   },
 
   input: {
@@ -181,12 +183,13 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 15,
     marginBottom: 20,
+    fontSize: 16,
   },
 
   button: {
     width: '100%',
     height: 50,
-    backgroundColor: '#222',
+    backgroundColor: '#1976D2',
     justifyContent: 'center',
     alignItems: 'center',
     borderRadius: 8,
@@ -208,4 +211,3 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
 });
-

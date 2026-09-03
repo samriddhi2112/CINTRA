@@ -26,7 +26,7 @@ export default function LoginScreen({ navigation }) {
     if (!cleanedBadgeId) {
       Alert.alert(
         'Badge ID Required',
-        'Please enter your Badge ID.'
+        'Please enter your Badge ID (Demo: OFF001).'
       );
       return;
     }
@@ -35,7 +35,7 @@ export default function LoginScreen({ navigation }) {
     if (!validateBadgeId(cleanedBadgeId)) {
       Alert.alert(
         'Access Denied',
-        'Invalid Badge ID.'
+        'Invalid Badge ID. Please use DEMO Badge ID: OFF001'
       );
       return;
     }
@@ -48,6 +48,7 @@ export default function LoginScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
+
       <Text style={styles.title}>
         CINTRA
       </Text>
@@ -58,7 +59,7 @@ export default function LoginScreen({ navigation }) {
 
       <TextInput
         style={styles.input}
-        placeholder="Enter Badge ID"
+        placeholder="Enter Badge ID (Demo: OFF001)"
         placeholderTextColor="#888"
         value={badgeId}
         onChangeText={setBadgeId}
@@ -74,6 +75,7 @@ export default function LoginScreen({ navigation }) {
           LOGIN
         </Text>
       </TouchableOpacity>
+
     </View>
   );
 }
@@ -91,11 +93,14 @@ const styles = StyleSheet.create({
     fontSize: 36,
     fontWeight: 'bold',
     marginBottom: 10,
+    color: '#1976D2',
+    letterSpacing: 2,
   },
 
   subtitle: {
     fontSize: 20,
     marginBottom: 30,
+    color: '#333',
   },
 
   input: {
@@ -106,12 +111,13 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 15,
     marginBottom: 20,
+    fontSize: 16,
   },
 
   button: {
     width: '100%',
     height: 50,
-    backgroundColor: '#222',
+    backgroundColor: '#1976D2',
     justifyContent: 'center',
     alignItems: 'center',
     borderRadius: 8,
@@ -123,4 +129,3 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
 });
-

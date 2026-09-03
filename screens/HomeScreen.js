@@ -1,4 +1,3 @@
-
 import React from 'react';
 import {
   View,
@@ -16,8 +15,12 @@ export default function HomeScreen({ navigation }) {
 
       {/* Header */}
       <View style={styles.header}>
+
         <View>
-          <Text style={styles.title}>CINTRA</Text>
+          <Text style={styles.title}>
+            CINTRA
+          </Text>
+
           <Text style={styles.subtitle}>
             Investigation & Intelligence
           </Text>
@@ -30,6 +33,7 @@ export default function HomeScreen({ navigation }) {
             color="#1976D2"
           />
         </View>
+
       </View>
 
       <Text style={styles.welcome}>
@@ -44,8 +48,11 @@ export default function HomeScreen({ navigation }) {
       {/* CAPTURE & MATCH */}
       <TouchableOpacity
         style={styles.card}
-        onPress={() => navigation.navigate('CaptureEvidence')}
+        onPress={() =>
+          navigation.navigate('CaptureEvidence')
+        }
       >
+
         <View style={styles.iconContainer}>
           <Ionicons
             name="camera"
@@ -55,6 +62,7 @@ export default function HomeScreen({ navigation }) {
         </View>
 
         <View style={styles.cardContent}>
+
           <Text style={styles.cardTitle}>
             CAPTURE & MATCH
           </Text>
@@ -62,6 +70,7 @@ export default function HomeScreen({ navigation }) {
           <Text style={styles.cardText}>
             Capture evidence and identify a suspect
           </Text>
+
         </View>
 
         <Ionicons
@@ -69,14 +78,18 @@ export default function HomeScreen({ navigation }) {
           size={22}
           color="#1976D2"
         />
+
       </TouchableOpacity>
 
 
       {/* CRIMINAL DATABASE */}
       <TouchableOpacity
         style={styles.card}
-        onPress={() => navigation.navigate('DatabaseSearch')}
+        onPress={() =>
+          navigation.navigate('DatabaseSearch')
+        }
       >
+
         <View style={styles.iconContainer}>
           <Ionicons
             name="search"
@@ -86,6 +99,7 @@ export default function HomeScreen({ navigation }) {
         </View>
 
         <View style={styles.cardContent}>
+
           <Text style={styles.cardTitle}>
             CRIMINAL DATABASE
           </Text>
@@ -93,6 +107,7 @@ export default function HomeScreen({ navigation }) {
           <Text style={styles.cardText}>
             Search criminal records using ID
           </Text>
+
         </View>
 
         <Ionicons
@@ -100,14 +115,18 @@ export default function HomeScreen({ navigation }) {
           size={22}
           color="#1976D2"
         />
+
       </TouchableOpacity>
 
 
       {/* UPLOAD EVIDENCE */}
       <TouchableOpacity
         style={styles.card}
-        onPress={() => navigation.navigate('EvidenceUpload')}
+        onPress={() =>
+          navigation.navigate('EvidenceUpload')
+        }
       >
+
         <View style={styles.iconContainer}>
           <Ionicons
             name="cloud-upload"
@@ -117,6 +136,7 @@ export default function HomeScreen({ navigation }) {
         </View>
 
         <View style={styles.cardContent}>
+
           <Text style={styles.cardTitle}>
             UPLOAD EVIDENCE
           </Text>
@@ -124,6 +144,7 @@ export default function HomeScreen({ navigation }) {
           <Text style={styles.cardText}>
             Upload image, video, audio or documents
           </Text>
+
         </View>
 
         <Ionicons
@@ -131,11 +152,13 @@ export default function HomeScreen({ navigation }) {
           size={22}
           color="#1976D2"
         />
+
       </TouchableOpacity>
 
 
       {/* SECURITY STATUS */}
       <View style={styles.securityBox}>
+
         <Ionicons
           name="shield-checkmark"
           size={22}
@@ -143,6 +166,7 @@ export default function HomeScreen({ navigation }) {
         />
 
         <View style={styles.securityTextContainer}>
+
           <Text style={styles.securityTitle}>
             SECURE SESSION
           </Text>
@@ -150,15 +174,20 @@ export default function HomeScreen({ navigation }) {
           <Text style={styles.securityText}>
             Authentication active
           </Text>
+
         </View>
+
       </View>
 
 
       {/* LOGOUT */}
       <TouchableOpacity
         style={styles.logout}
-        onPress={() => navigation.replace('Login')}
+        onPress={() =>
+          navigation.replace('Login')
+        }
       >
+
         <Ionicons
           name="log-out"
           size={21}
@@ -168,6 +197,7 @@ export default function HomeScreen({ navigation }) {
         <Text style={styles.logoutText}>
           LOGOUT
         </Text>
+
       </TouchableOpacity>
 
     </SafeAreaView>
@@ -249,12 +279,9 @@ const styles = StyleSheet.create({
     width: 58,
     height: 58,
     borderRadius: 12,
-
     backgroundColor: '#E3F2FD',
-
     justifyContent: 'center',
     alignItems: 'center',
-
     marginRight: 15,
   },
 
@@ -279,12 +306,9 @@ const styles = StyleSheet.create({
   securityBox: {
     flexDirection: 'row',
     alignItems: 'center',
-
     backgroundColor: '#E3F2FD',
-
     borderRadius: 10,
     padding: 14,
-
     marginTop: 10,
   },
 
@@ -309,7 +333,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-
     marginTop: 22,
     padding: 10,
   },
@@ -322,4 +345,3 @@ const styles = StyleSheet.create({
   },
 
 });
-

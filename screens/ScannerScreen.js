@@ -1,10 +1,15 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, {
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
 
 import {
-  View,
-  Text,
-  TouchableOpacity,
   StyleSheet,
+  Text,
+  View,
+  TouchableOpacity,
+  Image,
   Alert,
   ActivityIndicator,
 } from 'react-native';
@@ -13,6 +18,8 @@ import {
   CameraView,
   useCameraPermissions,
 } from 'expo-camera';
+
+import { identifyFace } from '../services/api';
 
 import {
   isAuthenticated,
@@ -25,12 +32,28 @@ import { calculateSHA256 } from '../services/hashService';
 
 import ForensicWatermark from '../components/ForensicWatermark';
 
+import { Ionicons } from '@expo/vector-icons';
+
 
 export default function ScannerScreen({ navigation }) {
 
-  const [permission, requestPermission] = useCameraPermissions();
-  const [cameraReady, setCameraReady] = useState(false);
-  const [capturing, setCapturing] = useState(false);
+  const [permission, requestPermission] =
+    useCameraPermissions();
+
+  const [cameraReady, setCameraReady] =
+    useState(false);
+
+  const [capturedImage, setCapturedImage] =
+    useState(null);
+
+  const [capturedEvidence, setCapturedEvidence] =
+    useState(null);
+
+  const [isTakingPicture, setIsTakingPicture] =
+    useState(false);
+
+  const [isIdentifying, setIsIdentifying] =
+    useState(false);
 
   const cameraRef = useRef(null);
 
@@ -41,7 +64,10 @@ export default function ScannerScreen({ navigation }) {
   const sessionExpiredShown = useRef(false);
 
 
-  // Request/check camera permission
+  // --------------------------------------------------
+  // CAMERA PERMISSION
+  // --------------------------------------------------
+
   useEffect(() => {
     if (!permission) {
       return;
@@ -53,7 +79,10 @@ export default function ScannerScreen({ navigation }) {
   }, [permission]);
 
 
-  // Session monitoring
+  // --------------------------------------------------
+  // SESSION MONITORING
+  // --------------------------------------------------
+
   useEffect(() => {
 
     const checkSession = () => {
@@ -97,11 +126,11 @@ export default function ScannerScreen({ navigation }) {
     checkSession();
 
     // Then check every second
-    const interval = setInterval(checkSession, 1000);
+    const interval = setInterval(
+      checkSession,
+      1000
+    );
 
-
-    // IMPORTANT:
-    // Stop the interval when ScannerScreen is removed
     return () => {
       clearInterval(interval);
     };
@@ -109,7 +138,10 @@ export default function ScannerScreen({ navigation }) {
   }, [navigation]);
 
 
-  // Update activity whenever user interacts with the scanner
+  // --------------------------------------------------
+  // USER ACTIVITY
+  // --------------------------------------------------
+
   const handleScreenActivity = () => {
 
     if (loggingOut.current) {
@@ -122,8 +154,11 @@ export default function ScannerScreen({ navigation }) {
   };
 
 
-  // Capture evidence
-  const handleCapture = async () => {
+  // --------------------------------------------------
+  // TAKE PHOTO
+  // --------------------------------------------------
+
+  const takePicture = async () => {
 
     handleScreenActivity();
 
@@ -131,11 +166,16 @@ export default function ScannerScreen({ navigation }) {
       return;
     }
 
+    if (isTakingPicture || isIdentifying) {
+      return;
+    }
+
     if (!cameraRef.current) {
       Alert.alert(
-        'Camera Error',
-        'Camera is not ready.'
+        'Camera Not Ready',
+        'The camera is not ready yet. Please wait a moment and try again.'
       );
+
       return;
     }
 
@@ -144,53 +184,56 @@ export default function ScannerScreen({ navigation }) {
         'Camera Not Ready',
         'Please wait for the camera to initialize.'
       );
+
       return;
     }
-
-    if (capturing) {
-      return;
-    }
-
 
     try {
 
-      setCapturing(true);
+      setIsTakingPicture(true);
 
-      const photo = await cameraRef.current.takePictureAsync({
-        quality: 1,
-        exif: true,
-      });
-
+      const photo =
+        await cameraRef.current.takePictureAsync({
+          quality: 1,
+          exif: true,
+        });
 
       if (!photo || !photo.uri) {
-        throw new Error('No photo was captured.');
+        throw new Error(
+          'No photo was captured.'
+        );
       }
 
+      setCapturedImage(photo.uri);
 
       // Generate SHA-256 hash
-      const sha256 = await calculateSHA256(photo.uri);
+      const sha256 =
+        await calculateSHA256(photo.uri);
 
-
-      const currentUser = getCurrentUser();
-
+      const currentUser =
+        getCurrentUser();
 
       // Create evidence metadata
       const evidence = {
         uri: photo.uri,
         sha256: sha256,
-        badgeId: currentUser?.badgeId || 'Unknown',
-        capturedAt: new Date().toISOString(),
+        badgeId:
+          currentUser?.badgeId ||
+          'Unknown',
+        capturedAt:
+          new Date().toISOString(),
       };
 
+      setCapturedEvidence(evidence);
 
-      // Send evidence to Result screen
-      navigation.navigate('Result', {
-        evidence: evidence,
-      });
+      updateActivity();
 
     } catch (error) {
 
-      console.error('Evidence capture error:', error);
+      console.error(
+        'Camera capture error:',
+        error
+      );
 
       Alert.alert(
         'Capture Failed',
@@ -199,37 +242,149 @@ export default function ScannerScreen({ navigation }) {
 
     } finally {
 
-      setCapturing(false);
+      setIsTakingPicture(false);
 
     }
   };
 
 
-  // Manual logout
+  // --------------------------------------------------
+  // RETAKE PHOTO
+  // --------------------------------------------------
+
+  const retakePicture = () => {
+
+    handleScreenActivity();
+
+    if (isIdentifying) {
+      return;
+    }
+
+    setCapturedImage(null);
+    setCapturedEvidence(null);
+    setCameraReady(false);
+  };
+
+
+  // --------------------------------------------------
+  // SEND PHOTO TO BACKEND
+  // --------------------------------------------------
+
+  const scanCapturedImage = async () => {
+
+    handleScreenActivity();
+
+    if (!isAuthenticated()) {
+      return;
+    }
+
+    if (!capturedImage) {
+      Alert.alert(
+        'No Photo',
+        'Please capture a photo before scanning.'
+      );
+
+      return;
+    }
+
+    if (isIdentifying) {
+      return;
+    }
+
+    try {
+
+      setIsIdentifying(true);
+
+      console.log(
+        'Sending image to backend...'
+      );
+
+      console.log(
+        'Image URI:',
+        capturedImage
+      );
+
+      const response =
+        await identifyFace(
+          capturedImage
+        );
+
+      console.log(
+        'BACKEND RESPONSE:',
+        response
+      );
+
+      updateActivity();
+
+      /*
+        Pass BOTH:
+
+        1. Backend identification response
+        2. Evidence metadata containing SHA-256
+
+        This allows ResultScreen to display
+        suspect information AND verify evidence
+        integrity.
+      */
+
+      navigation.navigate('Result', {
+        response: response,
+        capturedImage: capturedImage,
+        evidence: capturedEvidence,
+      });
+
+    } catch (error) {
+
+      console.error(
+        'IDENTIFICATION ERROR:',
+        error
+      );
+
+      Alert.alert(
+        'Identification Failed',
+        error.message ||
+          'Could not connect to the identification server.'
+      );
+
+    } finally {
+
+      setIsIdentifying(false);
+
+    }
+  };
+
+
+  // --------------------------------------------------
+  // MANUAL LOGOUT
+  // --------------------------------------------------
+
   const handleLogout = () => {
 
-    // VERY IMPORTANT:
-    // Tell the session checker that this is intentional logout
+    // Tell session checker this is intentional logout
     loggingOut.current = true;
 
-    // Prevent any expiration popup
+    // Prevent expiration popup
     sessionExpiredShown.current = true;
 
-    // Clear authentication
     logout();
 
-    // Go directly to Login
     navigation.replace('Login');
   };
 
 
-  // Camera permission still loading
+  // --------------------------------------------------
+  // PERMISSION LOADING
+  // --------------------------------------------------
+
   if (!permission) {
 
     return (
       <View style={styles.centerContainer}>
 
-        <ActivityIndicator size="large" />
+        <ActivityIndicator
+          size="large"
+          color="#1976D2"
+        />
 
         <Text style={styles.message}>
           Checking camera permission...
@@ -240,20 +395,39 @@ export default function ScannerScreen({ navigation }) {
   }
 
 
-  // Camera permission denied
+  // --------------------------------------------------
+  // PERMISSION DENIED
+  // --------------------------------------------------
+
   if (!permission.granted) {
 
     return (
       <View style={styles.centerContainer}>
 
+        <Ionicons
+          name="camera"
+          size={55}
+          color="#1976D2"
+        />
+
+        <Text style={styles.title}>
+          CINTRA Camera
+        </Text>
+
         <Text style={styles.message}>
-          Camera permission is required to capture evidence.
+          Camera permission is required
+          to capture evidence.
         </Text>
 
         <TouchableOpacity
-          style={styles.button}
+          style={styles.permissionButton}
           onPress={requestPermission}
         >
+          <Ionicons
+            name="camera"
+            size={21}
+            color="#FFFFFF"
+          />
 
           <Text style={styles.buttonText}>
             GRANT CAMERA PERMISSION
@@ -265,6 +439,11 @@ export default function ScannerScreen({ navigation }) {
           style={styles.logoutButton}
           onPress={handleLogout}
         >
+          <Ionicons
+            name="log-out"
+            size={21}
+            color="#1976D2"
+          />
 
           <Text style={styles.logoutText}>
             LOGOUT
@@ -277,61 +456,237 @@ export default function ScannerScreen({ navigation }) {
   }
 
 
+  // --------------------------------------------------
+  // MAIN CAMERA SCREEN
+  // --------------------------------------------------
+
   return (
     <View
       style={styles.container}
       onTouchStart={handleScreenActivity}
     >
 
-      {/* Camera */}
+      {/* Live Camera */}
+
       <CameraView
         ref={cameraRef}
         style={styles.camera}
         facing="back"
-        onCameraReady={() => setCameraReady(true)}
-      >
+        mode="picture"
+        onCameraReady={() =>
+          setCameraReady(true)
+        }
+      />
 
-        {/* Forensic watermark */}
-        <ForensicWatermark
-          badgeId={getCurrentUser()?.badgeId}
+      {/* Captured Image */}
+
+      {capturedImage && (
+        <Image
+          source={{
+            uri: capturedImage,
+          }}
+          style={styles.capturedImage}
+          resizeMode="cover"
         />
+      )}
 
-      </CameraView>
+
+      {/* Forensic Watermark */}
+
+      <ForensicWatermark
+        badgeId={
+          capturedEvidence?.badgeId ||
+          getCurrentUser()?.badgeId
+        }
+        capturedAt={
+          capturedEvidence?.capturedAt
+        }
+      />
 
 
-      {/* Bottom controls */}
-      <View style={styles.controls}>
+      {/* Top Section */}
 
-        <Text style={styles.title}>
-          CINTRA EVIDENCE SCANNER
+      <View style={styles.topSection}>
+
+        <View style={styles.headerIcon}>
+          <Ionicons
+            name="shield-checkmark"
+            size={24}
+            color="#FFFFFF"
+          />
+        </View>
+
+        <Text style={styles.header}>
+          CINTRA
         </Text>
 
+        <Text style={styles.instruction}>
+          {isIdentifying
+            ? 'Identifying...'
+            : capturedImage
+            ? 'Photo captured successfully'
+            : "Position the person's face inside the frame"}
+        </Text>
+
+      </View>
+
+
+      {/* Face Frame */}
+
+      {!capturedImage && (
+        <View style={styles.scanFrame}>
+
+          <View style={styles.cornerTopLeft} />
+          <View style={styles.cornerTopRight} />
+          <View style={styles.cornerBottomLeft} />
+          <View style={styles.cornerBottomRight} />
+
+        </View>
+      )}
+
+
+      {/* Identification Loading */}
+
+      {isIdentifying && (
+        <View style={styles.loadingOverlay}>
+
+          <View style={styles.loadingCard}>
+
+            <ActivityIndicator
+              size="large"
+              color="#1976D2"
+            />
+
+            <Text style={styles.loadingTitle}>
+              IDENTIFYING
+            </Text>
+
+            <Text style={styles.loadingMessage}>
+              Please wait while CINTRA
+              processes the image.
+            </Text>
+
+          </View>
+
+        </View>
+      )}
+
+
+      {/* Bottom Controls */}
+
+      <View style={styles.bottomSection}>
+
+        {capturedImage ? (
+
+          <View style={styles.buttonRow}>
+
+            {/* Retake */}
+
+            <TouchableOpacity
+              style={[
+                styles.secondaryButton,
+                isIdentifying &&
+                  styles.disabledButton,
+              ]}
+              onPress={retakePicture}
+              disabled={isIdentifying}
+              activeOpacity={0.7}
+            >
+
+              <Ionicons
+                name="refresh"
+                size={21}
+                color="#1976D2"
+              />
+
+              <Text
+                style={styles.secondaryButtonText}
+              >
+                RETAKE
+              </Text>
+
+            </TouchableOpacity>
+
+
+            {/* Identify */}
+
+            <TouchableOpacity
+              style={[
+                styles.primaryButton,
+                isIdentifying &&
+                  styles.disabledButton,
+              ]}
+              onPress={scanCapturedImage}
+              disabled={isIdentifying}
+              activeOpacity={0.7}
+            >
+
+              <Ionicons
+                name="scan"
+                size={21}
+                color="#FFFFFF"
+              />
+
+              <Text
+                style={styles.primaryButtonText}
+              >
+                {isIdentifying
+                  ? 'IDENTIFYING...'
+                  : 'IDENTIFY'}
+              </Text>
+
+            </TouchableOpacity>
+
+          </View>
+
+        ) : (
+
+          <TouchableOpacity
+            style={[
+              styles.scanButton,
+              (!cameraReady ||
+                isTakingPicture) &&
+                styles.disabledButton,
+            ]}
+            onPress={takePicture}
+            disabled={
+              !cameraReady ||
+              isTakingPicture
+            }
+            activeOpacity={0.7}
+          >
+
+            <Ionicons
+              name="camera"
+              size={25}
+              color="#FFFFFF"
+            />
+
+            <Text style={styles.scanButtonText}>
+              {isTakingPicture
+                ? 'CAPTURING...'
+                : 'SCAN'}
+            </Text>
+
+          </TouchableOpacity>
+
+        )}
+
+
+        {/* Logout */}
 
         <TouchableOpacity
-          style={[
-            styles.captureButton,
-            (!cameraReady || capturing) &&
-              styles.disabledButton,
-          ]}
-          onPress={handleCapture}
-          disabled={!cameraReady || capturing}
-        >
-
-          <Text style={styles.buttonText}>
-            {capturing
-              ? 'PROCESSING...'
-              : 'CAPTURE EVIDENCE'}
-          </Text>
-
-        </TouchableOpacity>
-
-
-        <TouchableOpacity
-          style={styles.logoutButton}
+          style={styles.logoutButtonCamera}
           onPress={handleLogout}
         >
 
-          <Text style={styles.logoutText}>
+          <Ionicons
+            name="log-out"
+            size={19}
+            color="#FFFFFF"
+          />
+
+          <Text style={styles.logoutTextCamera}>
             LOGOUT
           </Text>
 
@@ -344,6 +699,10 @@ export default function ScannerScreen({ navigation }) {
 }
 
 
+// --------------------------------------------------
+// STYLES
+// --------------------------------------------------
+
 const styles = StyleSheet.create({
 
   container: {
@@ -352,75 +711,280 @@ const styles = StyleSheet.create({
   },
 
   camera: {
-    flex: 1,
+    ...StyleSheet.absoluteFillObject,
   },
 
-  controls: {
-    padding: 20,
-    backgroundColor: '#111',
+  capturedImage: {
+    ...StyleSheet.absoluteFillObject,
+    width: '100%',
+    height: '100%',
   },
 
-  title: {
-    color: '#fff',
-    fontSize: 18,
+  topSection: {
+    position: 'absolute',
+    top: 45,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    zIndex: 10,
+  },
+
+  headerIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: '#1976D2',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 5,
+  },
+
+  header: {
+    fontSize: 28,
     fontWeight: 'bold',
+    color: '#FFFFFF',
+    letterSpacing: 2,
+  },
+
+  instruction: {
+    marginTop: 10,
+    paddingHorizontal: 30,
     textAlign: 'center',
-    marginBottom: 15,
+    fontSize: 15,
+    color: '#FFFFFF',
   },
 
-  captureButton: {
-    backgroundColor: '#2563eb',
-    padding: 16,
-    borderRadius: 10,
-    alignItems: 'center',
-    marginBottom: 10,
+  scanFrame: {
+    position: 'absolute',
+    top: '27%',
+    alignSelf: 'center',
+    width: 260,
+    height: 320,
+    borderWidth: 1,
+    borderColor: '#FFFFFF',
+    borderRadius: 15,
+    zIndex: 5,
   },
 
-  button: {
-    backgroundColor: '#2563eb',
-    padding: 16,
-    borderRadius: 10,
+  cornerTopLeft: {
+    position: 'absolute',
+    top: -2,
+    left: -2,
+    width: 35,
+    height: 35,
+    borderTopWidth: 4,
+    borderLeftWidth: 4,
+    borderColor: '#1976D2',
+  },
+
+  cornerTopRight: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    width: 35,
+    height: 35,
+    borderTopWidth: 4,
+    borderRightWidth: 4,
+    borderColor: '#1976D2',
+  },
+
+  cornerBottomLeft: {
+    position: 'absolute',
+    bottom: -2,
+    left: -2,
+    width: 35,
+    height: 35,
+    borderBottomWidth: 4,
+    borderLeftWidth: 4,
+    borderColor: '#1976D2',
+  },
+
+  cornerBottomRight: {
+    position: 'absolute',
+    bottom: -2,
+    right: -2,
+    width: 35,
+    height: 35,
+    borderBottomWidth: 4,
+    borderRightWidth: 4,
+    borderColor: '#1976D2',
+  },
+
+  bottomSection: {
+    position: 'absolute',
+    bottom: 30,
+    left: 0,
+    right: 0,
     alignItems: 'center',
-    marginTop: 20,
-    width: '90%',
+    zIndex: 20,
+  },
+
+  buttonRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+
+  scanButton: {
+    width: 180,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#1976D2',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 10,
+  },
+
+  primaryButton: {
+    width: 150,
+    height: 55,
+    borderRadius: 28,
+    backgroundColor: '#1976D2',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 10,
+  },
+
+  secondaryButton: {
+    width: 130,
+    height: 55,
+    borderRadius: 28,
+    backgroundColor: '#FFFFFF',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 10,
   },
 
   disabledButton: {
     opacity: 0.5,
   },
 
-  buttonText: {
-    color: '#fff',
-    fontSize: 16,
+  scanButtonText: {
+    fontSize: 18,
     fontWeight: 'bold',
+    color: '#FFFFFF',
+    marginLeft: 8,
   },
 
-  logoutButton: {
-    backgroundColor: '#b91c1c',
-    padding: 15,
-    borderRadius: 10,
+  primaryButtonText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    marginLeft: 7,
+  },
+
+  secondaryButtonText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#1976D2',
+    marginLeft: 7,
+  },
+
+  loadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
     alignItems: 'center',
-    marginTop: 10,
+    justifyContent: 'center',
+    zIndex: 15,
   },
 
-  logoutText: {
-    color: '#fff',
-    fontSize: 16,
+  loadingCard: {
+    width: '80%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 15,
+    padding: 25,
+    alignItems: 'center',
+  },
+
+  loadingTitle: {
+    marginTop: 15,
+    fontSize: 20,
     fontWeight: 'bold',
+    color: '#1976D2',
+  },
+
+  loadingMessage: {
+    marginTop: 8,
+    fontSize: 14,
+    textAlign: 'center',
+    color: '#555',
   },
 
   centerContainer: {
     flex: 1,
-    justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    justifyContent: 'center',
+    padding: 30,
+    backgroundColor: '#F5F7FA',
+  },
+
+  title: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    marginTop: 12,
+    marginBottom: 15,
+    color: '#1976D2',
   },
 
   message: {
     fontSize: 16,
     textAlign: 'center',
+    marginBottom: 25,
+    color: '#555',
+  },
+
+  permissionButton: {
+    backgroundColor: '#1976D2',
+    paddingHorizontal: 25,
+    paddingVertical: 15,
+    borderRadius: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  buttonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: 'bold',
+    marginLeft: 8,
+  },
+
+  logoutButton: {
     marginTop: 15,
+    borderWidth: 1,
+    borderColor: '#1976D2',
+    paddingHorizontal: 30,
+    paddingVertical: 14,
+    borderRadius: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+
+  logoutText: {
+    color: '#1976D2',
+    fontSize: 14,
+    fontWeight: 'bold',
+    marginLeft: 7,
+  },
+
+  logoutButtonCamera: {
+    marginTop: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20,
+    backgroundColor: 'rgba(25, 118, 210, 0.9)',
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+
+  logoutTextCamera: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: 'bold',
+    marginLeft: 6,
   },
 
 });
-
