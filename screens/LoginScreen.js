@@ -1,34 +1,78 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
   TextInput,
   TouchableOpacity,
   StyleSheet,
+  Alert,
 } from 'react-native';
 
+import {
+  validateBadgeId,
+  logout,
+} from '../services/authService';
+
 export default function LoginScreen({ navigation }) {
+  const [badgeId, setBadgeId] = useState('');
+
   const handleLogin = () => {
-    navigation.navigate('OTP');
+    const cleanedBadgeId = badgeId.trim();
+
+    // Make sure no previous session remains
+    logout();
+
+    // Badge ID required
+    if (!cleanedBadgeId) {
+      Alert.alert(
+        'Badge ID Required',
+        'Please enter your Badge ID (Demo: OFF001).'
+      );
+      return;
+    }
+
+    // Validate Badge ID
+    if (!validateBadgeId(cleanedBadgeId)) {
+      Alert.alert(
+        'Access Denied',
+        'Invalid Badge ID. Please use DEMO Badge ID: OFF001'
+      );
+      return;
+    }
+
+    // Move to OTP verification
+    navigation.navigate('OTP', {
+      badgeId: cleanedBadgeId,
+    });
   };
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>CINTRA</Text>
+      <Text style={styles.title}>
+        CINTRA
+      </Text>
 
-      <Text style={styles.subtitle}>Officer Login</Text>
+      <Text style={styles.subtitle}>
+        Officer Login
+      </Text>
 
       <TextInput
         style={styles.input}
-        placeholder="Enter Badge ID"
+        placeholder="Enter Badge ID (Demo: OFF001)"
         placeholderTextColor="#888"
+        value={badgeId}
+        onChangeText={setBadgeId}
+        autoCapitalize="characters"
+        autoCorrect={false}
       />
 
       <TouchableOpacity
         style={styles.button}
         onPress={handleLogin}
       >
-        <Text style={styles.buttonText}>LOGIN</Text>
+        <Text style={styles.buttonText}>
+          LOGIN
+        </Text>
       </TouchableOpacity>
     </View>
   );
@@ -47,11 +91,14 @@ const styles = StyleSheet.create({
     fontSize: 36,
     fontWeight: 'bold',
     marginBottom: 10,
+    color: '#1976D2',
+    letterSpacing: 2,
   },
 
   subtitle: {
     fontSize: 20,
     marginBottom: 30,
+    color: '#333',
   },
 
   input: {
@@ -62,12 +109,13 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 15,
     marginBottom: 20,
+    fontSize: 16,
   },
 
   button: {
     width: '100%',
     height: 50,
-    backgroundColor: '#222',
+    backgroundColor: '#1976D2',
     justifyContent: 'center',
     alignItems: 'center',
     borderRadius: 8,
