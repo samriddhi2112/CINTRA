@@ -55,7 +55,7 @@ export default function CaptureEvidenceScreen({ navigation }) {
         </Text>
 
         <Text style={styles.cameraSubtitle}>
-          Live face scanner is ready
+          Camera feed will appear here
         </Text>
 
       </View>
@@ -72,7 +72,7 @@ export default function CaptureEvidenceScreen({ navigation }) {
         />
 
         <Text style={styles.buttonText}>
-          CAPTURE PHOTO (SCANNER)
+          CAPTURE PHOTO
         </Text>
       </TouchableOpacity>
 

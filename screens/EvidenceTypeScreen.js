@@ -13,6 +13,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
+
 import { calculateSHA256 } from '../services/hashService';
 import { uploadEvidence } from '../services/api';
 import { getCurrentUser } from '../services/authService';
@@ -51,16 +52,21 @@ export default function EvidenceTypeScreen({ navigation, route }) {
       case 'Audio':
         return 'audio/*';
       case 'Document':
-        return ['application/pdf', 'application/msword', 'text/plain', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+        return [
+          'application/pdf',
+          'application/msword',
+          'text/plain',
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        ];
       default:
         return '*/*';
     }
   };
 
-  // Select file from device (phone / laptop)
   const handleSelect = async () => {
     try {
       setUploadResult(null);
+
       const res = await DocumentPicker.getDocumentAsync({
         type: getMimeTypeFilter(),
         copyToCacheDirectory: true,
@@ -68,10 +74,11 @@ export default function EvidenceTypeScreen({ navigation, route }) {
 
       if (!res.canceled && res.assets && res.assets.length > 0) {
         const fileAsset = res.assets[0];
+
         setSelectedFile(fileAsset);
 
-        // Compute SHA-256 hash of the selected device file
         setIsHashing(true);
+
         try {
           const hash = await calculateSHA256(fileAsset.uri);
           setFileHash(hash);
@@ -84,11 +91,14 @@ export default function EvidenceTypeScreen({ navigation, route }) {
       }
     } catch (err) {
       console.error('Document picker error:', err);
-      Alert.alert('Selection Error', 'Could not open file picker on device.');
+
+      Alert.alert(
+        'Selection Error',
+        'Could not open file picker on device.'
+      );
     }
   };
 
-  // Upload file to FastAPI backend
   const handleUpload = async () => {
     if (!selectedFile) {
       Alert.alert(
@@ -100,10 +110,14 @@ export default function EvidenceTypeScreen({ navigation, route }) {
 
     try {
       setIsUploading(true);
+
       const user = getCurrentUser();
       const badgeId = user?.badgeId || 'OFF001';
 
-      console.log('Uploading evidence file:', selectedFile.name);
+      console.log(
+        'Uploading evidence file:',
+        selectedFile.name
+      );
 
       const resultData = await uploadEvidence(
         selectedFile.uri,
@@ -122,10 +136,13 @@ export default function EvidenceTypeScreen({ navigation, route }) {
 
     } catch (uploadErr) {
       console.error('Upload failed:', uploadErr);
+
       Alert.alert(
         'Upload Failed',
-        uploadErr.message || 'Unable to upload evidence to server.'
+        uploadErr.message ||
+          'Unable to upload evidence to server.'
       );
+
     } finally {
       setIsUploading(false);
     }
@@ -172,7 +189,9 @@ export default function EvidenceTypeScreen({ navigation, route }) {
         </Text>
 
         <Text style={styles.description}>
-          Select a {type.toLowerCase()} file directly from your device storage to calculate SHA-256 hash and upload to investigation evidence server.
+          Select a {type.toLowerCase()} file directly from
+          your device storage to calculate SHA-256 hash
+          and upload to investigation evidence server.
         </Text>
 
         {/* File Selection Card */}
@@ -180,7 +199,11 @@ export default function EvidenceTypeScreen({ navigation, route }) {
 
           <View style={styles.fileIcon}>
             <Ionicons
-              name={selectedFile ? "document-attach" : getIcon()}
+              name={
+                selectedFile
+                  ? 'document-attach'
+                  : getIcon()
+              }
               size={32}
               color="#1976D2"
             />
@@ -188,23 +211,45 @@ export default function EvidenceTypeScreen({ navigation, route }) {
 
           {selectedFile ? (
             <View style={styles.fileInfo}>
-              <Text style={styles.fileName} numberOfLines={1}>
+
+              <Text
+                style={styles.fileName}
+                numberOfLines={1}
+              >
                 {selectedFile.name}
               </Text>
+
               <Text style={styles.fileDetails}>
-                Size: {(selectedFile.size / 1024).toFixed(1)} KB | Type: {selectedFile.mimeType || type}
+                Size:{' '}
+                {selectedFile.size
+                  ? (selectedFile.size / 1024).toFixed(1)
+                  : '0'}{' '}
+                KB | Type:{' '}
+                {selectedFile.mimeType || type}
               </Text>
 
               <View style={styles.hashBox}>
-                <Text style={styles.hashLabel}>SHA-256 HASH:</Text>
+
+                <Text style={styles.hashLabel}>
+                  SHA-256 HASH:
+                </Text>
+
                 {isHashing ? (
-                  <ActivityIndicator size="small" color="#1976D2" />
+                  <ActivityIndicator
+                    size="small"
+                    color="#1976D2"
+                  />
                 ) : (
-                  <Text style={styles.hashValue} numberOfLines={1}>
+                  <Text
+                    style={styles.hashValue}
+                    numberOfLines={1}
+                  >
                     {fileHash}
                   </Text>
                 )}
+
               </View>
+
             </View>
           ) : (
             <Text style={styles.fileText}>
@@ -224,7 +269,9 @@ export default function EvidenceTypeScreen({ navigation, route }) {
             />
 
             <Text style={styles.buttonText}>
-              {selectedFile ? 'CHANGE FILE' : `SELECT ${type.toUpperCase()}`}
+              {selectedFile
+                ? 'CHANGE FILE'
+                : `SELECT ${type.toUpperCase()}`}
             </Text>
           </TouchableOpacity>
 
@@ -232,12 +279,19 @@ export default function EvidenceTypeScreen({ navigation, route }) {
 
         {/* Upload Button */}
         <TouchableOpacity
-          style={[styles.uploadButton, (!selectedFile || isUploading) && styles.disabledButton]}
+          style={[
+            styles.uploadButton,
+            (!selectedFile || isUploading) &&
+              styles.disabledButton,
+          ]}
           onPress={handleUpload}
           disabled={!selectedFile || isUploading}
         >
           {isUploading ? (
-            <ActivityIndicator color="#FFFFFF" size="small" />
+            <ActivityIndicator
+              color="#FFFFFF"
+              size="small"
+            />
           ) : (
             <>
               <Ionicons
@@ -256,13 +310,36 @@ export default function EvidenceTypeScreen({ navigation, route }) {
         {/* Upload Success Card */}
         {uploadResult && (
           <View style={styles.successCard}>
+
             <View style={styles.successHeader}>
-              <Ionicons name="checkmark-circle" size={24} color="#388E3C" />
-              <Text style={styles.successTitle}>SAVED ON SERVER</Text>
+
+              <Ionicons
+                name="checkmark-circle"
+                size={24}
+                color="#388E3C"
+              />
+
+              <Text style={styles.successTitle}>
+                SAVED ON SERVER
+              </Text>
+
             </View>
-            <Text style={styles.successDetail}>Path: {uploadResult.file_path}</Text>
-            <Text style={styles.successDetail}>Size: {(uploadResult.size_bytes / 1024).toFixed(1)} KB</Text>
-            <Text style={styles.successDetail}>SHA-256: {uploadResult.sha256?.substring(0, 16)}...</Text>
+
+            <Text style={styles.successDetail}>
+              Path: {uploadResult.file_path}
+            </Text>
+
+            <Text style={styles.successDetail}>
+              Size:{' '}
+              {(uploadResult.size_bytes / 1024).toFixed(1)}
+              {' '}KB
+            </Text>
+
+            <Text style={styles.successDetail}>
+              SHA-256:{' '}
+              {uploadResult.sha256?.substring(0, 16)}...
+            </Text>
+
           </View>
         )}
 
@@ -310,14 +387,14 @@ const styles = StyleSheet.create({
   },
 
   mainIcon: {
-    width: 85,
-    height: 85,
+    width: 90,
+    height: 90,
     borderRadius: 22,
     backgroundColor: '#E3F2FD',
     justifyContent: 'center',
     alignItems: 'center',
     alignSelf: 'center',
-    marginBottom: 16,
+    marginBottom: 18,
   },
 
   title: {
@@ -333,13 +410,14 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 19,
     marginTop: 8,
-    marginBottom: 22,
+    marginBottom: 25,
+    paddingHorizontal: 8,
   },
 
   card: {
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
-    padding: 20,
+    padding: 22,
     alignItems: 'center',
     elevation: 3,
     marginBottom: 18,
@@ -397,13 +475,14 @@ const styles = StyleSheet.create({
 
   hashValue: {
     fontSize: 11,
-    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    fontFamily:
+      Platform.OS === 'ios' ? 'Courier' : 'monospace',
     color: '#333',
     marginTop: 2,
   },
 
   selectButton: {
-    height: 48,
+    height: 50,
     width: '100%',
     borderRadius: 10,
     backgroundColor: '#1976D2',

@@ -74,7 +74,10 @@ export default function DatabaseSearchScreen({ navigation }) {
 
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+      >
 
         {/* Icon */}
         <View style={styles.mainIcon}>
@@ -90,7 +93,8 @@ export default function DatabaseSearchScreen({ navigation }) {
         </Text>
 
         <Text style={styles.description}>
-          Enter Suspect ID (e.g. S001) or Name (e.g. Raj) to retrieve live backend record.
+          Enter Suspect ID (e.g. S001) or Name (e.g. Raj)
+          to retrieve live backend record.
         </Text>
 
         {/* Search Card */}
@@ -132,18 +136,26 @@ export default function DatabaseSearchScreen({ navigation }) {
                   handleSearch(code);
                 }}
               >
-                <Text style={styles.demoChipText}>{code}</Text>
+                <Text style={styles.demoChipText}>
+                  {code}
+                </Text>
               </TouchableOpacity>
             ))}
           </View>
 
           <TouchableOpacity
-            style={[styles.searchButton, loading && styles.disabledButton]}
+            style={[
+              styles.searchButton,
+              loading && styles.disabledButton
+            ]}
             onPress={() => handleSearch()}
             disabled={loading}
           >
             {loading ? (
-              <ActivityIndicator color="#FFFFFF" size="small" />
+              <ActivityIndicator
+                color="#FFFFFF"
+                size="small"
+              />
             ) : (
               <>
                 <Ionicons
@@ -166,23 +178,50 @@ export default function DatabaseSearchScreen({ navigation }) {
           <View style={styles.resultCard}>
 
             <View style={styles.resultHeader}>
-              <Ionicons name="person-circle" size={40} color="#1976D2" />
+
+              <Ionicons
+                name="person-circle"
+                size={40}
+                color="#1976D2"
+              />
+
               <View style={styles.resultHeaderText}>
-                <Text style={styles.suspectName}>{result.name}</Text>
-                <Text style={styles.suspectCode}>ID: {result.suspect_id}</Text>
+                <Text style={styles.suspectName}>
+                  {result.name}
+                </Text>
+
+                <Text style={styles.suspectCode}>
+                  ID: {result.suspect_id}
+                </Text>
               </View>
+
             </View>
 
             <View style={styles.divider} />
 
             <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Role / Charges</Text>
-              <Text style={styles.detailValue}>{result.role}</Text>
+              <Text style={styles.detailLabel}>
+                Role / Charges
+              </Text>
+
+              <Text style={styles.detailValue}>
+                {result.role}
+              </Text>
             </View>
 
             <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Status</Text>
-              <Text style={[styles.detailValue, result.wanted ? styles.wantedText : styles.safeText]}>
+              <Text style={styles.detailLabel}>
+                Status
+              </Text>
+
+              <Text
+                style={[
+                  styles.detailValue,
+                  result.wanted
+                    ? styles.wantedText
+                    : styles.safeText
+                ]}
+              >
                 {result.wanted ? 'WANTED' : 'CLEARED'}
               </Text>
             </View>

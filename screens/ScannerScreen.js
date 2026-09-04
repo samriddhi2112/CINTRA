@@ -1,4 +1,9 @@
-import React, { useRef, useState } from 'react';
+import React, {
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
+
 import {
   StyleSheet,
   Text,
@@ -8,32 +13,79 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
-import { CameraView, useCameraPermissions } from 'expo-camera';
-import { identifyFace } from '../services/api';
+
+import {
+  CameraView,
+  useCameraPermissions,
+} from 'expo-camera';
+
+import {
+  isAuthenticated,
+  logout,
+  getCurrentUser,
+  updateActivity,
+} from '../services/authService';
+
+import { calculateSHA256 } from '../services/hashService';
+
+import ForensicWatermark from '../components/ForensicWatermark';
+
+import { Ionicons } from '@expo/vector-icons';
+
 
 export default function ScannerScreen({ navigation }) {
-  const [permission, requestPermission] = useCameraPermissions();
+
+  const [permission, requestPermission] =
+    useCameraPermissions();
+
+  const [cameraReady, setCameraReady] =
+    useState(false);
+
+  const [capturedImage, setCapturedImage] =
+    useState(null);
+
+  const [capturedEvidence, setCapturedEvidence] =
+    useState(null);
+
+  const [isTakingPicture, setIsTakingPicture] =
+    useState(false);
 
   const cameraRef = useRef(null);
 
-  const [capturedImage, setCapturedImage] = useState(null);
-  const [isTakingPicture, setIsTakingPicture] = useState(false);
-  const [isIdentifying, setIsIdentifying] = useState(false);
+
+  // --------------------------------------------------
+  // CAMERA PERMISSION
+  // --------------------------------------------------
+
+  useEffect(() => {
+
+    if (!permission) {
+      return;
+    }
+
+    if (!permission.granted) {
+      requestPermission();
+    }
+
+  }, [permission]);
+
 
   // --------------------------------------------------
   // TAKE PHOTO
   // --------------------------------------------------
 
   const takePicture = async () => {
-    console.log('================================');
-    console.log('SCAN BUTTON WAS PRESSED');
-    console.log('================================');
 
-    if (isTakingPicture || isIdentifying) {
+    if (!isAuthenticated()) {
+      return;
+    }
+
+    if (isTakingPicture) {
       return;
     }
 
     if (!cameraRef.current) {
+
       Alert.alert(
         'Camera Not Ready',
         'The camera is not ready yet. Please wait a moment and try again.'
@@ -42,68 +94,121 @@ export default function ScannerScreen({ navigation }) {
       return;
     }
 
+    if (!cameraReady) {
+
+      Alert.alert(
+        'Camera Not Ready',
+        'Please wait for the camera to initialize.'
+      );
+
+      return;
+    }
+
     try {
+
       setIsTakingPicture(true);
 
-      console.log('Taking picture...');
+      const photo =
+        await cameraRef.current.takePictureAsync({
+          quality: 1,
+          exif: true,
+        });
 
-      const photo = await cameraRef.current.takePictureAsync({
-        quality: 0.8,
-        skipProcessing: false,
-      });
-
-      console.log('PHOTO CAPTURED');
-      console.log(photo);
-
-      if (photo && photo.uri) {
-        setCapturedImage(photo.uri);
-
-        console.log('PHOTO URI:', photo.uri);
+      if (!photo || !photo.uri) {
+        throw new Error('No photo was captured.');
       }
+
+      setCapturedImage(photo.uri);
+
+
+      // Generate SHA-256 hash
+
+      const sha256 =
+        await calculateSHA256(photo.uri);
+
+
+      // Get logged-in officer
+
+      const currentUser =
+        getCurrentUser();
+
+
+      // Create evidence metadata
+
+      const evidence = {
+
+        uri: photo.uri,
+
+        sha256: sha256,
+
+        badgeId:
+          currentUser?.badgeId ||
+          'Unknown',
+
+        capturedAt:
+          new Date().toISOString(),
+
+      };
+
+
+      setCapturedEvidence(evidence);
+
+      updateActivity();
+
     } catch (error) {
-      console.error('Camera capture error:', error);
+
+      console.error(
+        'Camera capture error:',
+        error
+      );
 
       Alert.alert(
         'Capture Failed',
-        'Unable to capture the photo. Please try again.'
+        'Unable to capture or process the evidence.'
       );
+
     } finally {
+
       setIsTakingPicture(false);
+
     }
   };
+
 
   // --------------------------------------------------
   // RETAKE PHOTO
   // --------------------------------------------------
 
   const retakePicture = () => {
-    console.log('RETAKE BUTTON PRESSED');
-
-    if (isIdentifying) {
-      return;
-    }
 
     setCapturedImage(null);
+
+    setCapturedEvidence(null);
+
+    setCameraReady(false);
+
   };
 
+
   // --------------------------------------------------
-  // SEND PHOTO TO BACKEND
+  // LOGOUT
   // --------------------------------------------------
 
-  const scanCapturedImage = async () => {
-    if (!capturedImage) {
-      Alert.alert(
-        'No Photo',
-        'Please capture a photo before scanning.'
-      );
+  const handleLogout = () => {
 
-      return;
-    }
+    logout();
 
-    if (isIdentifying) {
-      return;
-    }
+    navigation.reset({
+      index: 0,
+      routes: [
+        {
+          name: 'Login',
+        },
+      ],
+    });
+  };
 
+  const handleIdentify = async () => {
     try {
       setIsIdentifying(true);
 
@@ -118,16 +223,6 @@ export default function ScannerScreen({ navigation }) {
 
       console.log('BACKEND RESPONSE:');
       console.log(response);
-
-      /*
-        IMPORTANT:
-
-        We use response.match to determine whether
-        the person was matched.
-
-        We do NOT check:
-        response.message === "Match Found"
-      */
 
       navigation.navigate('Result', {
         response: response,
@@ -147,183 +242,284 @@ export default function ScannerScreen({ navigation }) {
     }
   };
 
+
   // --------------------------------------------------
   // PERMISSION LOADING
   // --------------------------------------------------
 
   if (!permission) {
+
     return (
+
       <View style={styles.centerContainer}>
+
+        <ActivityIndicator
+          size="large"
+          color="#1976D2"
+        />
+
         <Text style={styles.message}>
           Checking camera permission...
         </Text>
+
       </View>
     );
   }
 
+
   // --------------------------------------------------
-  // PERMISSION NOT GRANTED
+  // PERMISSION DENIED
   // --------------------------------------------------
 
   if (!permission.granted) {
+
     return (
+
       <View style={styles.centerContainer}>
+
+        <Ionicons
+          name="camera"
+          size={55}
+          color="#1976D2"
+        />
+
         <Text style={styles.title}>
           CINTRA Camera
         </Text>
 
         <Text style={styles.message}>
-          CINTRA needs access to your camera to scan a person.
+          Camera permission is required
+          to capture evidence.
         </Text>
+
 
         <TouchableOpacity
           style={styles.permissionButton}
           onPress={requestPermission}
         >
+
+          <Ionicons
+            name="camera"
+            size={21}
+            color="#FFFFFF"
+          />
+
           <Text style={styles.buttonText}>
-            Allow Camera
+            GRANT CAMERA PERMISSION
           </Text>
+
         </TouchableOpacity>
+
+
+        <TouchableOpacity
+          style={styles.logoutButton}
+          onPress={handleLogout}
+        >
+
+          <Ionicons
+            name="log-out"
+            size={21}
+            color="#1976D2"
+          />
+
+          <Text style={styles.logoutText}>
+            LOGOUT
+          </Text>
+
+        </TouchableOpacity>
+
       </View>
     );
   }
+
 
   // --------------------------------------------------
   // MAIN CAMERA SCREEN
   // --------------------------------------------------
 
   return (
+
     <View style={styles.container}>
 
-      {/* Live camera */}
+      {/* Live Camera */}
+
       <CameraView
         ref={cameraRef}
         style={styles.camera}
         facing="back"
         mode="picture"
+        onCameraReady={() =>
+          setCameraReady(true)
+        }
       />
 
-      {/* Captured image */}
+
+      {/* Captured Image */}
+
       {capturedImage && (
+
         <Image
-          source={{ uri: capturedImage }}
+          source={{
+            uri: capturedImage,
+          }}
           style={styles.capturedImage}
           resizeMode="cover"
         />
+
       )}
 
-      {/* Top section */}
+
+      {/* Forensic Watermark */}
+
+      <ForensicWatermark
+        badgeId={
+          capturedEvidence?.badgeId ||
+          getCurrentUser()?.badgeId
+        }
+
+        capturedAt={
+          capturedEvidence?.capturedAt
+        }
+      />
+
+
+      {/* Top Section */}
+
       <View style={styles.topSection}>
+
+        <View style={styles.headerIcon}>
+
+          <Ionicons
+            name="shield-checkmark"
+            size={24}
+            color="#FFFFFF"
+          />
+
+        </View>
 
         <Text style={styles.header}>
           CINTRA
         </Text>
 
         <Text style={styles.instruction}>
-          {isIdentifying
-            ? 'Identifying...'
-            : capturedImage
+
+          {capturedImage
             ? 'Photo captured successfully'
             : "Position the person's face inside the frame"}
+
         </Text>
 
       </View>
 
-      {/* Face frame */}
+
+      {/* Face Frame */}
+
       {!capturedImage && (
-        <View style={styles.scanFrame} />
-      )}
 
-      {/* Identification loading overlay */}
-      {isIdentifying && (
-        <View style={styles.loadingOverlay}>
+        <View style={styles.scanFrame}>
 
-          <View style={styles.loadingCard}>
+          <View style={styles.cornerTopLeft} />
 
-            <ActivityIndicator
-              size="large"
-              color="#000"
-            />
+          <View style={styles.cornerTopRight} />
 
-            <Text style={styles.loadingTitle}>
-              IDENTIFYING
-            </Text>
+          <View style={styles.cornerBottomLeft} />
 
-            <Text style={styles.loadingMessage}>
-              Please wait while CINTRA processes the image.
-            </Text>
-
-          </View>
+          <View style={styles.cornerBottomRight} />
 
         </View>
+
       )}
 
-      {/* Bottom buttons */}
+
+      {/* Bottom Controls */}
+
       <View style={styles.bottomSection}>
 
         {capturedImage ? (
 
-          <View style={styles.buttonRow}>
+          // Only RETAKE remains after capture
 
-            {/* Retake */}
-            <TouchableOpacity
-              style={[
-                styles.secondaryButton,
-                isIdentifying && styles.disabledButton,
-              ]}
-              onPress={retakePicture}
-              disabled={isIdentifying}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.secondaryButtonText}>
-                RETAKE
-              </Text>
-            </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.secondaryButton}
+            onPress={retakePicture}
+            activeOpacity={0.7}
+          >
 
-            {/* Identify */}
-            <TouchableOpacity
-              style={[
-                styles.primaryButton,
-                isIdentifying && styles.disabledButton,
-              ]}
-              onPress={scanCapturedImage}
-              disabled={isIdentifying}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.primaryButtonText}>
-                {isIdentifying
-                  ? 'IDENTIFYING...'
-                  : 'IDENTIFY'}
-              </Text>
-            </TouchableOpacity>
+            <Ionicons
+              name="refresh"
+              size={21}
+              color="#1976D2"
+            />
 
-          </View>
+            <Text style={styles.secondaryButtonText}>
+              RETAKE
+            </Text>
+
+          </TouchableOpacity>
 
         ) : (
+
+          // SCAN / CAPTURE button
 
           <TouchableOpacity
             style={[
               styles.scanButton,
-              isTakingPicture && styles.disabledButton,
+              (!cameraReady ||
+                isTakingPicture) &&
+                styles.disabledButton,
             ]}
             onPress={takePicture}
-            disabled={isTakingPicture}
+            disabled={
+              !cameraReady ||
+              isTakingPicture
+            }
             activeOpacity={0.7}
           >
+
+            <Ionicons
+              name="camera"
+              size={25}
+              color="#FFFFFF"
+            />
+
             <Text style={styles.scanButtonText}>
+
               {isTakingPicture
                 ? 'CAPTURING...'
                 : 'SCAN'}
+
             </Text>
+
           </TouchableOpacity>
 
         )}
+
+
+        {/* Logout */}
+
+        <TouchableOpacity
+          style={styles.logoutButtonCamera}
+          onPress={handleLogout}
+        >
+
+          <Ionicons
+            name="log-out"
+            size={19}
+            color="#FFFFFF"
+          />
+
+          <Text style={styles.logoutTextCamera}>
+            LOGOUT
+          </Text>
+
+        </TouchableOpacity>
 
       </View>
 
     </View>
   );
 }
+
 
 // --------------------------------------------------
 // STYLES
@@ -348,103 +544,141 @@ const styles = StyleSheet.create({
 
   topSection: {
     position: 'absolute',
-    top: 55,
+    top: 45,
     left: 0,
     right: 0,
     alignItems: 'center',
     zIndex: 10,
   },
 
+  headerIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: '#1976D2',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 5,
+  },
+
   header: {
     fontSize: 28,
     fontWeight: 'bold',
-    color: '#fff',
+    color: '#FFFFFF',
+    letterSpacing: 2,
   },
 
   instruction: {
-    marginTop: 15,
+    marginTop: 10,
     paddingHorizontal: 30,
     textAlign: 'center',
-    fontSize: 16,
-    color: '#fff',
+    fontSize: 15,
+    color: '#FFFFFF',
   },
 
   scanFrame: {
     position: 'absolute',
-    top: '28%',
+    top: '27%',
     alignSelf: 'center',
     width: 260,
     height: 320,
-    borderWidth: 3,
-    borderColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#FFFFFF',
     borderRadius: 15,
     zIndex: 5,
   },
 
+  cornerTopLeft: {
+    position: 'absolute',
+    top: -2,
+    left: -2,
+    width: 35,
+    height: 35,
+    borderTopWidth: 4,
+    borderLeftWidth: 4,
+    borderColor: '#1976D2',
+  },
+
+  cornerTopRight: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    width: 35,
+    height: 35,
+    borderTopWidth: 4,
+    borderRightWidth: 4,
+    borderColor: '#1976D2',
+  },
+
+  cornerBottomLeft: {
+    position: 'absolute',
+    bottom: -2,
+    left: -2,
+    width: 35,
+    height: 35,
+    borderBottomWidth: 4,
+    borderLeftWidth: 4,
+    borderColor: '#1976D2',
+  },
+
+  cornerBottomRight: {
+    position: 'absolute',
+    bottom: -2,
+    right: -2,
+    width: 35,
+    height: 35,
+    borderBottomWidth: 4,
+    borderRightWidth: 4,
+    borderColor: '#1976D2',
+  },
+
   bottomSection: {
     position: 'absolute',
-    bottom: 40,
+    bottom: 30,
     left: 0,
     right: 0,
     alignItems: 'center',
     zIndex: 20,
   },
 
-  buttonRow: {
-    flexDirection: 'row',
-    gap: 15,
-  },
-
   scanButton: {
-    width: 170,
+    width: 180,
     height: 60,
     borderRadius: 30,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-    elevation: 10,
-  },
-
-  primaryButton: {
-    width: 150,
-    height: 55,
-    borderRadius: 28,
-    backgroundColor: '#fff',
+    backgroundColor: '#1976D2',
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     elevation: 10,
   },
 
   secondaryButton: {
-    width: 130,
+    width: 160,
     height: 55,
     borderRadius: 28,
-    backgroundColor: '#333',
+    backgroundColor: '#FFFFFF',
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     elevation: 10,
   },
 
   disabledButton: {
-    opacity: 0.6,
+    opacity: 0.5,
   },
 
   scanButtonText: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#000',
-  },
-
-  primaryButtonText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#000',
+    color: '#FFFFFF',
+    marginLeft: 8,
   },
 
   secondaryButtonText: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#fff',
+    color: '#1976D2',
+    marginLeft: 7,
   },
 
   centerContainer: {
@@ -452,62 +686,74 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     padding: 30,
-    backgroundColor: '#fff',
+    backgroundColor: '#F5F7FA',
   },
 
   title: {
     fontSize: 28,
     fontWeight: 'bold',
-    marginBottom: 20,
+    marginTop: 12,
+    marginBottom: 15,
+    color: '#1976D2',
   },
 
   message: {
     fontSize: 16,
     textAlign: 'center',
-    marginBottom: 30,
+    marginBottom: 25,
+    color: '#555',
   },
 
   permissionButton: {
-    backgroundColor: '#000',
-    paddingHorizontal: 30,
+    backgroundColor: '#1976D2',
+    paddingHorizontal: 25,
     paddingVertical: 15,
-    borderRadius: 8,
+    borderRadius: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 
   buttonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-
-  loadingOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.55)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 15,
-  },
-
-  loadingCard: {
-    width: '80%',
-    backgroundColor: '#fff',
-    borderRadius: 15,
-    padding: 25,
-    alignItems: 'center',
-  },
-
-  loadingTitle: {
-    marginTop: 15,
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#000',
-  },
-
-  loadingMessage: {
-    marginTop: 8,
+    color: '#FFFFFF',
     fontSize: 14,
-    textAlign: 'center',
-    color: '#555',
+    fontWeight: 'bold',
+    marginLeft: 8,
+  },
+
+  logoutButton: {
+    marginTop: 15,
+    borderWidth: 1,
+    borderColor: '#1976D2',
+    paddingHorizontal: 30,
+    paddingVertical: 14,
+    borderRadius: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+
+  logoutText: {
+    color: '#1976D2',
+    fontSize: 14,
+    fontWeight: 'bold',
+    marginLeft: 7,
+  },
+
+  logoutButtonCamera: {
+    marginTop: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20,
+    backgroundColor: 'rgba(25, 118, 210, 0.9)',
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+
+  logoutTextCamera: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: 'bold',
+    marginLeft: 6,
   },
 
 });
