@@ -89,7 +89,18 @@ export default function ResultScreen({ route, navigation }) {
                 ? styles.matchBox
                 : styles.noMatchBox,
             ]}
-          />
+          >
+            <View
+              style={[
+                styles.boxBadge,
+                isMatch ? styles.matchBadge : styles.noMatchBadge,
+              ]}
+            >
+              <Text style={styles.boxBadgeText}>
+                {isMatch ? '✓ MATCH FOUND' : '⚠ NO MATCH'}
+              </Text>
+            </View>
+          </View>
 
         </View>
 
@@ -269,14 +280,41 @@ const styles = StyleSheet.create({
     marginLeft: -110,
     borderWidth: 4,
     borderRadius: 12,
+    alignItems: 'center',
   },
 
   matchBox: {
     borderColor: '#00c853',
+    backgroundColor: 'rgba(0, 200, 83, 0.18)',
   },
 
   noMatchBox: {
     borderColor: '#ffd600',
+    backgroundColor: 'rgba(255, 214, 0, 0.12)',
+  },
+
+  boxBadge: {
+    position: 'absolute',
+    top: -16,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+    elevation: 3,
+  },
+
+  matchBadge: {
+    backgroundColor: '#00c853',
+  },
+
+  noMatchBadge: {
+    backgroundColor: '#ffd600',
+  },
+
+  boxBadgeText: {
+    color: '#000',
+    fontSize: 12,
+    fontWeight: 'bold',
+    letterSpacing: 0.5,
   },
 
   resultCard: {

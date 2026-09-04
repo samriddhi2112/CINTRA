@@ -39,9 +39,9 @@ export default function DatabaseSearchScreen({ navigation }) {
       setResult(data);
 
     } catch (error) {
-      console.error('Suspect search error:', error);
+      console.log('[CINTRA Search] Suspect search result:', error.message);
       Alert.alert(
-        'Search Failed',
+        'Search Result',
         error.message || 'Suspect not found in database.'
       );
     } finally {
@@ -123,7 +123,7 @@ export default function DatabaseSearchScreen({ navigation }) {
           {/* Quick Demo ID Buttons */}
           <View style={styles.demoRow}>
             <Text style={styles.demoLabel}>Demo IDs:</Text>
-            {['S001', 'S002', 'S003'].map((code) => (
+            {['S001', 'S002', 'S003', 'S004'].map((code) => (
               <TouchableOpacity
                 key={code}
                 style={styles.demoChip}

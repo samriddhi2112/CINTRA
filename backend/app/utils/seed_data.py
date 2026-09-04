@@ -7,6 +7,7 @@ DEMO_SUSPECTS = [
     {"suspect_code": "S001", "name": "Raj Kumar", "role": "Theft Suspect", "wanted": True, "image_path": "data/demo/S001-1.png"},
     {"suspect_code": "S002", "name": "Arjun Mehta", "role": "Fraud Suspect", "wanted": False},
     {"suspect_code": "S003", "name": "Vikram Singh", "role": "Robbery Suspect", "wanted": True},
+    {"suspect_code": "S004", "name": "Anvi Mishra", "role": "Cyber Crime Suspect", "wanted": True, "image_path": "data/demo/S004-1.jpg"},
 ]
 
 def seed_database():
@@ -16,8 +17,12 @@ def seed_database():
             existing = db.query(Suspect).filter_by(suspect_code=item["suspect_code"]).first()
             if not existing:
                 db.add(Suspect(**item))
-            elif item.get("image_path") and existing.suspect_code == "S001":
-                existing.image_path = item["image_path"]
+            else:
+                existing.name = item["name"]
+                existing.role = item["role"]
+                existing.wanted = item["wanted"]
+                if item.get("image_path"):
+                    existing.image_path = item["image_path"]
         db.commit()
 
 def main():

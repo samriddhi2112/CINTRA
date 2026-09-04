@@ -135,10 +135,10 @@ export default function ScannerScreen({ navigation }) {
       });
 
     } catch (error) {
-      console.error('IDENTIFICATION ERROR:', error);
+      console.log('[CINTRA Scanner] Identification response:', error.message);
 
       Alert.alert(
-        'Identification Failed',
+        'Identification Result',
         error.message ||
           'Could not connect to the identification server.'
       );

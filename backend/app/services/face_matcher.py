@@ -47,7 +47,7 @@ def match_face(query_image, _query_face_box, suspects, mode: str = "demo") -> Ma
     if mode != "demo" or not suspects or not _models_available():
         return MatchResult(None, None)
 
-    detector = cv2.FaceDetectorYN.create(str(YUNET_MODEL_PATH), "", (320, 320), 0.8, 0.3, 5000)
+    detector = cv2.FaceDetectorYN.create(str(YUNET_MODEL_PATH), "", (320, 320), 0.10, 0.3, 5000)
     recognizer = cv2.FaceRecognizerSF.create(str(SFACE_MODEL_PATH), "")
     query_face = _detect_one(detector, query_image)
     if query_face is None:

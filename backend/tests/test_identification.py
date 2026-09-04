@@ -38,3 +38,17 @@ def test_enrolled_demo_reference_matches_s001(client):
     assert payload["match"] is True
     assert payload["suspect"]["suspect_id"] == "S001"
     assert payload["suspect"]["wanted"] is True
+
+def test_enrolled_demo_reference_matches_s004(client):
+    reference = Path(__file__).parents[1] / "data" / "demo" / "S004-1.jpg"
+    response = client.post(
+        "/api/v1/identify",
+        files={"image": ("S004-1.jpg", reference.read_bytes(), "image/jpeg")},
+    )
+    payload = response.json()
+    assert response.status_code == 200
+    assert payload["match"] is True
+    assert payload["suspect"]["suspect_id"] == "S004"
+    assert payload["suspect"]["name"] == "Anvi Mishra"
+    assert payload["suspect"]["wanted"] is True
+

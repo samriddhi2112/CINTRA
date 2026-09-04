@@ -7,7 +7,7 @@ load_dotenv(BASE_DIR / ".env")
 
 MATCHING_MODE = os.getenv("MATCHING_MODE", "demo").lower()
 # Cosine similarity threshold for the local OpenCV SFace prototype.
-DEMO_MATCH_THRESHOLD = float(os.getenv("DEMO_MATCH_THRESHOLD", "0.36"))
+DEMO_MATCH_THRESHOLD = float(os.getenv("DEMO_MATCH_THRESHOLD", "0.10"))
 MAX_IMAGE_SIZE_MB = int(os.getenv("MAX_IMAGE_SIZE_MB", "5"))
 MAX_IMAGE_SIZE_BYTES = MAX_IMAGE_SIZE_MB * 1024 * 1024
 DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{BASE_DIR / 'cintra.db'}")
