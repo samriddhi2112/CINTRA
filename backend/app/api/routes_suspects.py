@@ -12,30 +12,7 @@ def _public_suspect(suspect):
         "name": suspect.name,
         "role": suspect.role,
         "wanted": suspect.wanted,
-        "alias": getattr(suspect, "alias", None),
-        "dob": getattr(suspect, "dob", None),
-        "gender": getattr(suspect, "gender", None),
-        "nationality": getattr(suspect, "nationality", None),
-        "fir_number": getattr(suspect, "fir_number", None),
-        "offence_category": getattr(suspect, "offence_category", None),
-        "incident_date": getattr(suspect, "incident_date", None),
-        "incident_location": getattr(suspect, "incident_location", None),
-        "police_station": getattr(suspect, "police_station", None),
-        "court_name": getattr(suspect, "court_name", None),
-        "court_case_number": getattr(suspect, "court_case_number", None),
-        "filing_date": getattr(suspect, "filing_date", None),
-        "offence_description": getattr(suspect, "offence_description", None),
-        "applicable_section": getattr(suspect, "applicable_section", None),
-        "severity": getattr(suspect, "severity", None),
-        "case_status": getattr(suspect, "case_status", None),
-        "judgment_date": getattr(suspect, "judgment_date", None),
-        "verdict": getattr(suspect, "verdict", None),
-        "sentence_type": getattr(suspect, "sentence_type", None),
-        "sentence_duration": getattr(suspect, "sentence_duration", None),
-        "penalty": getattr(suspect, "penalty", None),
-        "appeal_status": getattr(suspect, "appeal_status", None),
     }
-
 
 @router.get("", response_model=list[SuspectResponse])
 def read_suspects(db: Session = Depends(get_db)):

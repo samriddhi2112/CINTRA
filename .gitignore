@@ -6,3 +6,4 @@ __pycache__/
 *.pyc
 .env
 .env.*test_cintra.db
+test_cintra.db
