@@ -33,14 +33,12 @@ def _enrollment_paths(suspect) -> list[Path]:
     """
     Return all valid enrollment images for a suspect.
 
-    Example:
+    Expected naming convention:
         S001-1.png
         S001-2.png
         S001-3.png
 
-    Files such as S001.jpg are intentionally not included
-    because the existing enrollment convention uses
-    <suspect_code>-<number>.<extension>.
+    Files such as S001.jpg are intentionally not included.
     """
 
     demo_dir = BASE_DIR / "data" / "demo"
@@ -60,6 +58,8 @@ def _enrollment_paths(suspect) -> list[Path]:
 # =========================================================
 
 def _models_available() -> bool:
+    """Return True when both YuNet and SFace models are available."""
+
     return (
         YUNET_MODEL_PATH.is_file()
         and SFACE_MODEL_PATH.is_file()
@@ -72,11 +72,13 @@ def _models_available() -> bool:
 
 def _detect_one(detector, image):
     """
-    Detect exactly one face.
+    Detect a face using YuNet.
 
-    Returns:
-        YuNet face representation if exactly one face exists.
-        None if there is no face or multiple faces.
+    If multiple detections are returned, choose the largest
+    detected bounding box.
+
+    The largest detected region performed better than selecting
+    the highest-confidence detection on the project demo data.
     """
 
     detector.setInputSize(
@@ -88,14 +90,18 @@ def _detect_one(detector, image):
     if faces is None or len(faces) == 0:
         return None
 
-    # Do NOT arbitrarily choose the largest face.
+    # Select the largest detected face.
     #
-    # If an enrollment image contains multiple faces,
-    # it is ambiguous and should not be used.
-    if len(faces) > 1:
-        return None
-
-    return faces[0]
+    # YuNet face format:
+    # [x, y, width, height, landmarks..., confidence]
+    #
+    # Face area = width * height
+    return max(
+        faces,
+        key=lambda face: float(
+            face[2] * face[3]
+        ),
+    )
 
 
 # =========================================================
@@ -104,13 +110,13 @@ def _detect_one(detector, image):
 
 def _feature(recognizer, image, face):
     """
-    Align the detected face using YuNet's facial landmarks
-    and extract the SFace embedding.
+    Align the detected face using YuNet landmarks and
+    extract the SFace embedding.
     """
 
     aligned = recognizer.alignCrop(
         image,
-        face
+        face,
     )
 
     return recognizer.feature(
@@ -124,7 +130,7 @@ def _feature(recognizer, image, face):
 
 def _normalize(feature):
     """
-    L2-normalize an embedding.
+    L2-normalize an SFace embedding.
     """
 
     norm = np.linalg.norm(feature)
@@ -133,78 +139,6 @@ def _normalize(feature):
         return feature
 
     return feature / norm
-
-
-# =========================================================
-# MULTI-IMAGE IDENTITY TEMPLATE
-# =========================================================
-
-def _build_template(
-    recognizer,
-    detector,
-    suspect,
-):
-    """
-    Build one identity template from all valid enrollment images.
-
-    Each enrollment image produces an SFace embedding.
-
-    The embeddings are:
-        1. individually normalized
-        2. averaged
-        3. normalized again
-
-    This makes the identity representation less dependent
-    on any single enrollment image.
-    """
-
-    features = []
-
-    for path in _enrollment_paths(suspect):
-
-        reference = cv2.imread(
-            str(path)
-        )
-
-        if reference is None:
-            continue
-
-        reference_face = _detect_one(
-            detector,
-            reference
-        )
-
-        if reference_face is None:
-            # No face OR multiple faces.
-            continue
-
-        feature = _feature(
-            recognizer,
-            reference,
-            reference_face
-        )
-
-        features.append(
-            _normalize(feature)
-        )
-
-    if not features:
-        return None
-
-    # Average all enrollment embeddings.
-    template = np.mean(
-        features,
-        axis=0
-    )
-
-    # Normalize the resulting identity template.
-    template = _normalize(
-        template
-    )
-
-    return template.astype(
-        np.float32
-    )
 
 
 # =========================================================
@@ -218,10 +152,10 @@ def match_face(
     mode: str = "demo",
 ) -> MatchResult:
     """
-    Match one live query face against the local consented
+    Match one query face against the local consented
     enrollment set.
 
-    Recognition strategy:
+    Recognition pipeline:
 
         Query image
              |
@@ -229,13 +163,22 @@ def match_face(
         YuNet detection
              |
              v
+        Largest detected face
+             |
+             v
+        SFace alignCrop
+             |
+             v
         SFace embedding
              |
              v
-        Compare against identity templates
+        Compare against every enrollment image
              |
              v
         Highest cosine similarity
+             |
+             v
+        Threshold decision
     """
 
     # -----------------------------------------------------
@@ -249,21 +192,31 @@ def match_face(
     ):
         return MatchResult(
             None,
-            None
+            None,
         )
 
     # -----------------------------------------------------
-    # Create models
+    # Create YuNet detector
     # -----------------------------------------------------
 
     detector = cv2.FaceDetectorYN.create(
         str(YUNET_MODEL_PATH),
         "",
         (320, 320),
-        0.10,
+
+        # Detection confidence threshold.
+        #
+        # Experiments showed that 0.60 gives much better
+        # usable-image coverage than the previous 0.10.
+        0.60,
+
         0.3,
         5000,
     )
+
+    # -----------------------------------------------------
+    # Create SFace recognizer
+    # -----------------------------------------------------
 
     recognizer = cv2.FaceRecognizerSF.create(
         str(SFACE_MODEL_PATH),
@@ -276,13 +229,13 @@ def match_face(
 
     query_face = _detect_one(
         detector,
-        query_image
+        query_image,
     )
 
     if query_face is None:
         return MatchResult(
             None,
-            None
+            None,
         )
 
     # -----------------------------------------------------
@@ -292,7 +245,7 @@ def match_face(
     query_feature = _feature(
         recognizer,
         query_image,
-        query_face
+        query_face,
     )
 
     query_feature = _normalize(
@@ -300,7 +253,7 @@ def match_face(
     )
 
     # -----------------------------------------------------
-    # Compare query against each suspect template
+    # Compare query against individual enrollment images
     # -----------------------------------------------------
 
     best_suspect = None
@@ -308,39 +261,79 @@ def match_face(
 
     for suspect in suspects:
 
-        template = _build_template(
-            recognizer,
-            detector,
-            suspect
-        )
+        for path in _enrollment_paths(suspect):
 
-        if template is None:
-            continue
+            # -------------------------------------------------
+            # Read enrollment image
+            # -------------------------------------------------
 
-        score = float(
-            recognizer.match(
-                query_feature,
-                template,
-                cv2.FaceRecognizerSF_FR_COSINE,
+            reference = cv2.imread(
+                str(path)
             )
-        )
 
-        # Keep the highest-scoring identity.
-        if (
-            best_score is None
-            or score > best_score
-        ):
-            best_score = score
-            best_suspect = suspect.suspect_code
+            if reference is None:
+                continue
+
+            # -------------------------------------------------
+            # Detect enrollment face
+            # -------------------------------------------------
+
+            reference_face = _detect_one(
+                detector,
+                reference,
+            )
+
+            if reference_face is None:
+                continue
+
+            # -------------------------------------------------
+            # Extract enrollment embedding
+            # -------------------------------------------------
+
+            reference_feature = _feature(
+                recognizer,
+                reference,
+                reference_face,
+            )
+
+            reference_feature = _normalize(
+                reference_feature
+            )
+
+            # -------------------------------------------------
+            # Calculate cosine similarity
+            # -------------------------------------------------
+
+            score = float(
+                recognizer.match(
+                    query_feature,
+                    reference_feature,
+                    cv2.FaceRecognizerSF_FR_COSINE,
+                )
+            )
+
+            # -------------------------------------------------
+            # Keep highest score
+            # -------------------------------------------------
+
+            if (
+                best_score is None
+                or score > best_score
+            ):
+                best_score = score
+                best_suspect = suspect.suspect_code
 
     # -----------------------------------------------------
-    # No usable enrollment templates
+    # No usable enrollment images
     # -----------------------------------------------------
 
-    if best_suspect is None or best_score is None:
+    if (
+        best_suspect is None
+        or best_score is None
+    ):
         return MatchResult(
             None,
-            None
+            None,
         )
 
     # -----------------------------------------------------
@@ -350,19 +343,19 @@ def match_face(
     if best_score < DEMO_MATCH_THRESHOLD:
         return MatchResult(
             None,
-            None
+            None,
         )
 
     # -----------------------------------------------------
-    # Convert cosine score to percentage
+    # Convert cosine similarity to percentage
     # -----------------------------------------------------
 
     confidence = round(
         best_score * 100,
-        1
+        1,
     )
 
     return MatchResult(
         best_suspect,
-        confidence
+        confidence,
     )
