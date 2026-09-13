@@ -4,10 +4,15 @@ import Constants from 'expo-constants';
 // FastAPI backend port
 const PORT = 8000;
 
-// Windows computer's IPv4 address.
-// FastAPI is running inside WSL, but the Android tablet
-// needs to connect through the Windows machine's network address.
-const BACKEND_IP = '10.61.0.174';
+// Backend IP address.
+//
+// If EXPO_PUBLIC_BACKEND_IP is defined in a .env file,
+// Expo will use that value.
+//
+// Otherwise, this falls back to the IP currently used
+// on your computer so your existing setup keeps working.
+const BACKEND_IP =
+  process.env.EXPO_PUBLIC_BACKEND_IP || '10.61.0.174';
 
 const getBaseUrl = () => {
   return `http://${BACKEND_IP}:${PORT}`;
