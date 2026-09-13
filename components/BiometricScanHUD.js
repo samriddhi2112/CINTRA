@@ -17,7 +17,12 @@ export default function BiometricScanHUD({
   style,
 }) {
   // Scan State Cycle:
-  // INITIALIZING SCANNER -> FACE DETECTED -> ANALYZING BIOMETRIC DATA -> VERIFYING MATCH -> MATCH FOUND / NO MATCH
+  // INITIALIZING SCANNER
+  // -> FACE DETECTED
+  // -> ANALYZING BIOMETRIC DATA
+  // -> VERIFYING MATCH
+  // -> MATCH FOUND / NO MATCH FOUND
+
   const [scanState, setScanState] = useState('INITIALIZING SCANNER');
   const [progress, setProgress] = useState(0);
   const [resultData, setResultData] = useState(null);
@@ -29,7 +34,9 @@ export default function BiometricScanHUD({
   const glowIntensityAnim = useRef(new Animated.Value(0.4)).current;
   const statusFadeAnim = useRef(new Animated.Value(1)).current;
 
+  // ---------------------------------------------------------
   // Scanning laser beam animation loop
+  // ---------------------------------------------------------
   useEffect(() => {
     const laserLoop = Animated.loop(
       Animated.sequence([
@@ -39,6 +46,7 @@ export default function BiometricScanHUD({
           easing: Easing.inOut(Easing.quad),
           useNativeDriver: false,
         }),
+
         Animated.timing(scanLineAnim, {
           toValue: 0,
           duration: 1800,
@@ -55,6 +63,7 @@ export default function BiometricScanHUD({
           duration: 800,
           useNativeDriver: true,
         }),
+
         Animated.timing(pulseAnim, {
           toValue: 1.0,
           duration: 800,
@@ -72,7 +81,9 @@ export default function BiometricScanHUD({
     };
   }, []);
 
-  // Smooth state transition helper with subtle fade/glitch feel
+  // ---------------------------------------------------------
+  // Smooth state transition helper
+  // ---------------------------------------------------------
   const transitionState = (newState) => {
     Animated.sequence([
       Animated.timing(statusFadeAnim, {
@@ -80,6 +91,7 @@ export default function BiometricScanHUD({
         duration: 120,
         useNativeDriver: true,
       }),
+
       Animated.timing(statusFadeAnim, {
         toValue: 1,
         duration: 180,
@@ -90,73 +102,112 @@ export default function BiometricScanHUD({
     setScanState(newState);
   };
 
+  // ---------------------------------------------------------
   // Trigger scan sequence when isScanning changes to true
+  // ---------------------------------------------------------
   useEffect(() => {
     if (!isScanning) return;
 
     let isMounted = true;
+
+    // Reset state for a new scan
     setProgress(0);
     setResultData(null);
+    matchPulseAnim.setValue(0);
+    glowIntensityAnim.setValue(0.4);
 
+    // -------------------------------------------------------
     // Step 1: INITIALIZING SCANNER
+    // -------------------------------------------------------
     transitionState('INITIALIZING SCANNER');
 
     const t1 = setTimeout(() => {
       if (!isMounted) return;
+
       transitionState('FACE DETECTED');
       setProgress(20);
     }, 500);
 
+    // -------------------------------------------------------
     // Step 2: ANALYZING BIOMETRIC DATA
-    // Facial landmark dots and connecting wireframe lines have been removed.
+    // -------------------------------------------------------
     const t2 = setTimeout(() => {
       if (!isMounted) return;
+
       transitionState('ANALYZING BIOMETRIC DATA');
       setProgress(68);
     }, 1200);
 
+    // -------------------------------------------------------
     // Step 3: VERIFYING MATCH
+    // -------------------------------------------------------
     const t3 = setTimeout(() => {
       if (!isMounted) return;
+
       transitionState('VERIFYING MATCH');
       setProgress(90);
     }, 3000);
 
-    // Step 4: FINAL RESULT (MATCH FOUND / NO MATCH)
+    // -------------------------------------------------------
+    // Step 4: FINAL RESULT
+    //
+    // IMPORTANT:
+    // The result comes from mockResult, which is actually the
+    // backend response passed from ScannerScreen.
+    //
+    // There is NO scan-count based fake result anymore.
+    // There is NO hardcoded suspect.
+    // There is NO hardcoded confidence.
+    // -------------------------------------------------------
     const t5 = setTimeout(() => {
       if (!isMounted) return;
+
       setProgress(100);
 
-      // Deterministic Alternating Scan Result Logic:
-      // Odd scans (1st, 3rd) -> NO MATCH FOUND (red error state)
-      // Even scans (2nd, 4th) -> MATCH FOUND (green success state)
-      let isMatch = false;
-      if (mockResult && typeof mockResult.match === 'boolean') {
-        isMatch = mockResult.match;
-      } else {
-        isMatch = scanCount % 2 === 0 && scanCount > 0;
-      }
+      // Use the REAL backend result.
+      //
+      // Expected backend format:
+      //
+      // {
+      //   match: true,
+      //   suspect: {
+      //     suspect_id: "S004",
+      //     name: "Anvi Mishra",
+      //     role: "Cyber Crime Suspect",
+      //     confidence: 77.1,
+      //     wanted: true
+      //   },
+      //   message: "Match Found"
+      // }
+      //
+      // OR:
+      //
+      // {
+      //   match: false,
+      //   suspect: null,
+      //   message: "No Match Found"
+      // }
 
-      const res = isMatch
-        ? {
-            match: true,
-            suspect: {
-              suspect_id: 'S004',
-              name: 'Anvi Mishra',
-              role: 'Cyber Crime Suspect',
-              confidence: 98.7,
-              wanted: true,
-            },
-            message: 'MATCH FOUND',
-          }
-        : {
-            match: false,
-            suspect: null,
-            message: 'NO MATCH FOUND',
-          };
+      const res =
+        mockResult &&
+        typeof mockResult.match === 'boolean'
+          ? mockResult
+          : {
+              match: false,
+              suspect: null,
+              message: 'NO MATCH FOUND',
+            };
+
+      console.log(
+        '[CINTRA HUD] Using backend result:',
+        res
+      );
 
       setResultData(res);
 
+      // -----------------------------------------------------
+      // MATCH
+      // -----------------------------------------------------
       if (res.match) {
         transitionState('MATCH FOUND');
 
@@ -167,12 +218,14 @@ export default function BiometricScanHUD({
             duration: 400,
             useNativeDriver: false,
           }),
+
           Animated.sequence([
             Animated.timing(matchPulseAnim, {
               toValue: 1,
               duration: 300,
               useNativeDriver: true,
             }),
+
             Animated.timing(matchPulseAnim, {
               toValue: 0.6,
               duration: 500,
@@ -180,8 +233,14 @@ export default function BiometricScanHUD({
             }),
           ]),
         ]).start();
-      } else {
+      }
+
+      // -----------------------------------------------------
+      // NO MATCH
+      // -----------------------------------------------------
+      else {
         transitionState('NO MATCH FOUND');
+
         Animated.timing(glowIntensityAnim, {
           toValue: 0.2,
           duration: 300,
@@ -189,48 +248,104 @@ export default function BiometricScanHUD({
         }).start();
       }
 
+      // Tell ScannerScreen that the scan has completed
       if (onScanComplete) {
         onScanComplete(res);
       }
     }, 4500);
 
+    // -------------------------------------------------------
+    // Cleanup timers
+    // -------------------------------------------------------
     return () => {
       isMounted = false;
+
       clearTimeout(t1);
       clearTimeout(t2);
       clearTimeout(t3);
       clearTimeout(t5);
     };
-  }, [isScanning, scanCount]);
+  }, [isScanning, mockResult]);
 
-  // Color variables according to state
+  // ---------------------------------------------------------
+  // Determine current visual state
+  // ---------------------------------------------------------
   const isMatchFound = scanState === 'MATCH FOUND';
-  const isNoMatch = scanState === 'NO MATCH' || scanState === 'NO MATCH FOUND';
-  const themeColor = isMatchFound ? '#00FF66' : isNoMatch ? '#FF3B30' : '#00E5FF';
 
+  const isNoMatch =
+    scanState === 'NO MATCH' ||
+    scanState === 'NO MATCH FOUND';
+
+  const themeColor = isMatchFound
+    ? '#00FF66'
+    : isNoMatch
+    ? '#FF3B30'
+    : '#00E5FF';
+
+  // ---------------------------------------------------------
+  // Get REAL confidence from backend result
+  // ---------------------------------------------------------
+  const backendConfidence =
+    resultData?.suspect?.confidence;
+
+  // Format confidence nicely
+  const formattedConfidence =
+    typeof backendConfidence === 'number'
+      ? backendConfidence.toFixed(1)
+      : backendConfidence != null
+      ? String(backendConfidence)
+      : null;
+
+  // ---------------------------------------------------------
+  // Render
+  // ---------------------------------------------------------
   return (
     <View style={[styles.container, style]}>
+
       {/* Background Cyber Grid Overlay */}
       <View style={styles.gridOverlay} />
 
-      {/* Top HUD Header */}
+      {/* ---------------------------------------------------
+          Top HUD Header
+      --------------------------------------------------- */}
       <View style={styles.topHudContainer}>
+
         <View style={styles.topHudRow}>
           <View style={styles.hudBadge}>
-            <View style={[styles.indicatorDot, { backgroundColor: themeColor }]} />
-            <Text style={styles.hudBadgeText}>SYS: ONLINE</Text>
+            <View
+              style={[
+                styles.indicatorDot,
+                {
+                  backgroundColor: themeColor,
+                },
+              ]}
+            />
+
+            <Text style={styles.hudBadgeText}>
+              SYS: ONLINE
+            </Text>
           </View>
 
-          <Text style={styles.monoMetadata}>ENC: AES-256-GCM | FPS: 60.0</Text>
+          <Text style={styles.monoMetadata}>
+            ENC: AES-256-GCM | FPS: 60.0
+          </Text>
         </View>
 
         <View style={styles.topHudRow}>
-          <Text style={styles.monoMetadata}>LAT: 28.5355° N | LON: 77.3910° E</Text>
-          <Text style={styles.monoMetadata}>BIO-VER: 4.9.2</Text>
+          <Text style={styles.monoMetadata}>
+            LAT: 28.5355° N | LON: 77.3910° E
+          </Text>
+
+          <Text style={styles.monoMetadata}>
+            BIO-VER: 4.9.2
+          </Text>
         </View>
+
       </View>
 
-      {/* Central Scanning Box (260x320 Frame) */}
+      {/* ---------------------------------------------------
+          Central Scanning Box
+      --------------------------------------------------- */}
       <View style={styles.scanBoxWrapper}>
 
         {/* Confirmation Pulse Ring on Match */}
@@ -240,7 +355,11 @@ export default function BiometricScanHUD({
               styles.matchPulseRing,
               {
                 borderColor: '#00FF66',
-                transform: [{ scale: pulseAnim }],
+                transform: [
+                  {
+                    scale: pulseAnim,
+                  },
+                ],
                 opacity: matchPulseAnim,
               },
             ]}
@@ -248,43 +367,104 @@ export default function BiometricScanHUD({
         )}
 
         {/* Corner Brackets */}
-        <View style={[styles.corner, styles.cornerTL, { borderColor: themeColor }]} />
-        <View style={[styles.corner, styles.cornerTR, { borderColor: themeColor }]} />
-        <View style={[styles.corner, styles.cornerBL, { borderColor: themeColor }]} />
-        <View style={[styles.corner, styles.cornerBR, { borderColor: themeColor }]} />
+        <View
+          style={[
+            styles.corner,
+            styles.cornerTL,
+            {
+              borderColor: themeColor,
+            },
+          ]}
+        />
+
+        <View
+          style={[
+            styles.corner,
+            styles.cornerTR,
+            {
+              borderColor: themeColor,
+            },
+          ]}
+        />
+
+        <View
+          style={[
+            styles.corner,
+            styles.cornerBL,
+            {
+              borderColor: themeColor,
+            },
+          ]}
+        />
+
+        <View
+          style={[
+            styles.corner,
+            styles.cornerBR,
+            {
+              borderColor: themeColor,
+            },
+          ]}
+        />
 
         {/* Center Target Frame Box */}
-        <View style={[styles.faceTargetFrame, { borderColor: `${themeColor}40` }]}>
+        <View
+          style={[
+            styles.faceTargetFrame,
+            {
+              borderColor: `${themeColor}40`,
+            },
+          ]}
+        >
 
-          {/* Vertical Scanning Beam Line */}
-          {isScanning && !isMatchFound && !isNoMatch && (
-            <Animated.View
-              style={[
-                styles.scanLaserBeam,
-                {
-                  top: scanLineAnim,
-                  backgroundColor: themeColor,
-                  shadowColor: themeColor,
-                },
-              ]}
-            />
-          )}
-
-
+          {/* Vertical Scanning Beam */}
+          {isScanning &&
+            !isMatchFound &&
+            !isNoMatch && (
+              <Animated.View
+                style={[
+                  styles.scanLaserBeam,
+                  {
+                    top: scanLineAnim,
+                    backgroundColor: themeColor,
+                    shadowColor: themeColor,
+                  },
+                ]}
+              />
+            )}
 
         </View>
 
         {/* Scan Percentage Count Badge */}
         <View style={styles.percentageBadge}>
-          <Text style={[styles.percentageText, { color: themeColor }]}>
+          <Text
+            style={[
+              styles.percentageText,
+              {
+                color: themeColor,
+              },
+            ]}
+          >
             {progress}%
           </Text>
         </View>
+
       </View>
 
-      {/* Dynamic Status Text Readout with smooth animation */}
-      <Animated.View style={[styles.statusContainer, { opacity: statusFadeAnim }]}>
+      {/* ---------------------------------------------------
+          Dynamic Status Text
+      --------------------------------------------------- */}
+      <Animated.View
+        style={[
+          styles.statusContainer,
+          {
+            opacity: statusFadeAnim,
+          },
+        ]}
+      >
+
         <View style={styles.statusBox}>
+
           <Ionicons
             name={
               isMatchFound
@@ -296,45 +476,107 @@ export default function BiometricScanHUD({
             size={22}
             color={themeColor}
           />
-          <Text style={[styles.statusText, { color: themeColor }]}>
-            {isMatchFound ? '✓ MATCH FOUND' : isNoMatch ? 'NO MATCH FOUND' : scanState}
+
+          <Text
+            style={[
+              styles.statusText,
+              {
+                color: themeColor,
+              },
+            ]}
+          >
+            {isMatchFound
+              ? '✓ MATCH FOUND'
+              : isNoMatch
+              ? 'NO MATCH FOUND'
+              : scanState}
           </Text>
+
         </View>
 
-        {/* Secondary Info banner on Match Found */}
+        {/* -------------------------------------------------
+            Match Banner
+        ------------------------------------------------- */}
         {isMatchFound && (
           <View style={styles.matchBanner}>
-            <Text style={styles.matchBannerTitle}>IDENTITY VERIFIED</Text>
-            <Text style={styles.matchBannerSub}>CONFIDENCE 98.7%</Text>
+
+            <Text style={styles.matchBannerTitle}>
+              IDENTITY VERIFIED
+            </Text>
+
+            {/* REAL BACKEND CONFIDENCE */}
+            <Text style={styles.matchBannerSub}>
+              {formattedConfidence !== null
+                ? `CONFIDENCE ${formattedConfidence}%`
+                : 'CONFIDENCE UNAVAILABLE'}
+            </Text>
+
+            {/* REAL BACKEND SUSPECT DATA */}
             {resultData?.suspect && (
-              <Text style={styles.matchBannerSub}>
-                SUSPECT ID: {resultData.suspect.suspect_id} | {resultData.suspect.name?.toUpperCase()}
-              </Text>
+              <>
+                <Text style={styles.matchBannerSub}>
+                  SUSPECT ID:{' '}
+                  {resultData.suspect.suspect_id}
+                  {' | '}
+                  {resultData.suspect.name?.toUpperCase()}
+                </Text>
+
+                {resultData.suspect.role && (
+                  <Text style={styles.matchBannerSub}>
+                    {resultData.suspect.role}
+                  </Text>
+                )}
+              </>
             )}
+
           </View>
         )}
 
-        {/* Secondary Info banner on No Match */}
+        {/* -------------------------------------------------
+            No Match Banner
+        ------------------------------------------------- */}
         {isNoMatch && (
           <View style={styles.noMatchBanner}>
-            <Text style={styles.noMatchTitle}>NO MATCH FOUND</Text>
-            <Text style={styles.noMatchSub}>FACIAL BIOMETRIC UNRECOGNIZED</Text>
+
+            <Text style={styles.noMatchTitle}>
+              NO MATCH FOUND
+            </Text>
+
+            <Text style={styles.noMatchSub}>
+              FACIAL BIOMETRIC UNRECOGNIZED
+            </Text>
+
           </View>
         )}
+
       </Animated.View>
 
-      {/* Bottom Technical Metadata Stream */}
+      {/* ---------------------------------------------------
+          Bottom Technical Metadata Stream
+      --------------------------------------------------- */}
       <View style={styles.bottomHudContainer}>
+
         <Text style={styles.monoMetadata}>
-          HASH: {resultData?.suspect?.suspect_id ? `S004-SHA256-${resultData.suspect.name.substring(0, 3)}` : '7F9A08B2-E841-4C9D-9A73'}
+          HASH:{' '}
+          {resultData?.suspect?.suspect_id
+            ? `${resultData.suspect.suspect_id}-SHA256-${(
+                resultData.suspect.name || ''
+              ).substring(0, 3)}`
+            : '7F9A08B2-E841-4C9D-9A73'}
         </Text>
 
       </View>
+
     </View>
   );
 }
 
+// =========================================================
+// STYLES
+// =========================================================
+
 const styles = StyleSheet.create({
+
   container: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0,0,0,0.45)',
@@ -344,12 +586,20 @@ const styles = StyleSheet.create({
     zIndex: 15,
   },
 
+  // -------------------------------------------------------
+  // Grid
+  // -------------------------------------------------------
+
   gridOverlay: {
     ...StyleSheet.absoluteFillObject,
     opacity: 0.05,
     borderWidth: 1,
     borderColor: '#00E5FF',
   },
+
+  // -------------------------------------------------------
+  // Top HUD
+  // -------------------------------------------------------
 
   topHudContainer: {
     width: '90%',
@@ -383,16 +633,26 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: 'bold',
     color: '#00E5FF',
-    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    fontFamily:
+      Platform.OS === 'ios'
+        ? 'Courier'
+        : 'monospace',
     letterSpacing: 0.8,
   },
 
   monoMetadata: {
     fontSize: 9,
     color: 'rgba(255, 255, 255, 0.75)',
-    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    fontFamily:
+      Platform.OS === 'ios'
+        ? 'Courier'
+        : 'monospace',
     letterSpacing: 0.5,
   },
+
+  // -------------------------------------------------------
+  // Scan Box
+  // -------------------------------------------------------
 
   scanBoxWrapper: {
     width: 260,
@@ -465,6 +725,9 @@ const styles = StyleSheet.create({
     zIndex: 8,
   },
 
+  // -------------------------------------------------------
+  // Percentage
+  // -------------------------------------------------------
 
   percentageBadge: {
     position: 'absolute',
@@ -480,8 +743,15 @@ const styles = StyleSheet.create({
   percentageText: {
     fontSize: 12,
     fontWeight: 'bold',
-    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    fontFamily:
+      Platform.OS === 'ios'
+        ? 'Courier'
+        : 'monospace',
   },
+
+  // -------------------------------------------------------
+  // Status
+  // -------------------------------------------------------
 
   statusContainer: {
     alignItems: 'center',
@@ -505,8 +775,15 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginLeft: 8,
     letterSpacing: 1.2,
-    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    fontFamily:
+      Platform.OS === 'ios'
+        ? 'Courier'
+        : 'monospace',
   },
+
+  // -------------------------------------------------------
+  // Match Banner
+  // -------------------------------------------------------
 
   matchBanner: {
     marginTop: 12,
@@ -531,8 +808,15 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     marginTop: 3,
     fontWeight: '600',
-    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    fontFamily:
+      Platform.OS === 'ios'
+        ? 'Courier'
+        : 'monospace',
   },
+
+  // -------------------------------------------------------
+  // No Match Banner
+  // -------------------------------------------------------
 
   noMatchBanner: {
     marginTop: 12,
@@ -556,8 +840,15 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: '#FFFFFF',
     marginTop: 3,
-    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    fontFamily:
+      Platform.OS === 'ios'
+        ? 'Courier'
+        : 'monospace',
   },
+
+  // -------------------------------------------------------
+  // Bottom HUD
+  // -------------------------------------------------------
 
   bottomHudContainer: {
     width: '90%',
@@ -569,4 +860,5 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(0, 229, 255, 0.3)',
     gap: 2,
   },
+
 });

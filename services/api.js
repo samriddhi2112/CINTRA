@@ -1,28 +1,24 @@
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 
-const PORT = 8001;
+// FastAPI backend port
+const PORT = 8000;
+
+// Windows computer's IPv4 address.
+// FastAPI is running inside WSL, but the Android tablet
+// needs to connect through the Windows machine's network address.
+const BACKEND_IP = '10.61.0.174';
 
 const getBaseUrl = () => {
-  const hostUri =
-    Constants.expoConfig?.hostUri ||
-    Constants.manifest?.debuggerHost ||
-    Constants.manifest2?.extra?.expoGo?.developer?.manifest?.debuggerHost;
-
-  if (hostUri) {
-    const ip = hostUri.split(':')[0];
-    if (ip) {
-      return `http://${ip}:${PORT}`;
-    }
-  }
-
-  return `http://10.63.3.75:${PORT}`;
+  return `http://${BACKEND_IP}:${PORT}`;
 };
 
 export const BASE_URL = getBaseUrl();
 
+console.log('[CINTRA API] Backend URL:', BASE_URL);
+
 const DEFAULT_HEADERS = {
-  'Accept': 'application/json',
+  Accept: 'application/json',
 };
 
 let localScanCount = 0;
@@ -52,7 +48,10 @@ export async function identifyFace(imageUri) {
 
   const targetUrl = `${BASE_URL}/api/v1/identify`;
 
+  console.log('[CINTRA API] Sending image to:', targetUrl);
+
   const formData = new FormData();
+
   formData.append('image', {
     uri: imageUri,
     name: 'scan.jpg',
@@ -61,7 +60,10 @@ export async function identifyFace(imageUri) {
 
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 4000);
+
+    const timeoutId = setTimeout(() => {
+      controller.abort();
+    }, 10000);
 
     const response = await fetch(targetUrl, {
       method: 'POST',
@@ -69,154 +71,106 @@ export async function identifyFace(imageUri) {
       headers: DEFAULT_HEADERS,
       signal: controller.signal,
     });
+
     clearTimeout(timeoutId);
 
     if (response.ok) {
       const data = await response.json();
+
       console.log('[CINTRA API] Backend response:', data);
+
       return data;
     }
-  } catch (netErr) {
-    console.warn('[CINTRA API] Network fetch error/timeout, using scan sequence fallback:', netErr.message);
-  }
 
-  // Fallback scan sequence if backend network fetch times out:
-  // 1st scan returns No Match, 2nd scan returns Match Found (S004 Anvi Mishra)
-  if (localScanCount % 2 === 1) {
+    console.error(
+      '[CINTRA API] Backend returned HTTP status:',
+      response.status
+    );
+
     return {
       match: false,
       suspect: null,
-      message: 'No Match Found',
+      message: 'Backend request failed',
     };
-  } else {
+  } catch (netErr) {
+    console.error(
+      '[CINTRA API] Network fetch error:',
+      netErr.message
+    );
+
     return {
-      match: true,
-      suspect: {
-        suspect_id: 'S004',
-        name: 'Anvi Mishra',
-        role: 'Cyber Crime Suspect',
-        confidence: 95.8,
-        wanted: true,
-        alias: 'Cyber Queen / Cipher',
-        dob: '1994-07-19',
-        gender: 'Female',
-        nationality: 'Indian',
-        fir_number: 'FIR-2024-7702',
-        offence_category: 'Cybercrime & Data Breach',
-        incident_date: '2024-04-01',
-        incident_location: 'Sector 62, Cyber Hub Noida / Remote',
-        police_station: 'Cyber Crime HQ, Sector 108 Noida',
-        court_name: 'Special IT Act Court, Gautam Buddha Nagar',
-        court_case_number: 'CC-9904/2024',
-        filing_date: '2024-04-05',
-        offence_description: 'Unauthorized access to state infrastructure, deployment of ransomware payload, and extortion demand of ₹2 Crores.',
-        applicable_section: 'IT Act Sec 66, 66C (Identity Theft), 66D (Cheating by Impersonation), IPC Sec 384 (Extortion)',
-        severity: 'Extreme Threat',
-        case_status: 'Under Investigation',
-        judgment_date: 'Pending',
-        verdict: 'Prime Suspect / Lookout Circular Active',
-        sentence_type: 'Non-Bailable Custodial Detention',
-        sentence_duration: 'Up to 10 Years',
-        penalty: '₹ 25,00,000 Fine & Asset Freezing',
-        appeal_status: 'Under Investigation',
-      },
-      message: 'Match Found',
+      match: false,
+      suspect: null,
+      message: 'Unable to connect to CINTRA backend',
     };
   }
 }
 
 /**
- * Fetches suspect details by suspect_code / criminal_id
- * GET /api/v1/suspects/{suspectCode}
+ * Fetch a suspect record from the CINTRA backend.
  */
-export async function searchSuspect(suspectCode) {
-  if (!suspectCode) {
-    throw new Error('Suspect ID is required.');
-  }
+export async function getSuspect(suspectId) {
+  const targetUrl = `${BASE_URL}/api/v1/suspects/${suspectId}`;
 
-  const targetUrl = `${BASE_URL}/api/v1/suspects/${encodeURIComponent(suspectCode.trim())}`;
   console.log('[CINTRA API] Fetching suspect:', targetUrl);
 
-  let response;
   try {
-    response = await fetch(targetUrl, {
+    const response = await fetch(targetUrl, {
+      method: 'GET',
       headers: DEFAULT_HEADERS,
     });
-  } catch (netErr) {
-    console.error('[CINTRA API] Suspect search error:', netErr);
-    throw new Error(`Cannot connect to server at ${targetUrl}`);
-  }
 
-  if (!response.ok) {
-    if (response.status === 404) {
-      throw new Error(`Suspect ID '${suspectCode}' was not found in the database.`);
+    if (!response.ok) {
+      console.error(
+        '[CINTRA API] Suspect request failed:',
+        response.status
+      );
+
+      return null;
     }
-    throw new Error(`Search failed with status ${response.status}`);
-  }
 
-  return await response.json();
+    return await response.json();
+  } catch (netErr) {
+    console.error(
+      '[CINTRA API] Suspect search error:',
+      netErr
+    );
+
+    return null;
+  }
 }
 
 /**
- * Uploads evidence (image, video, audio, document) to backend
- * POST /api/v1/evidence/upload
+ * Upload evidence to the CINTRA backend.
  */
-export async function uploadEvidence(fileUri, fileName, mimeType, evidenceType = 'Evidence', badgeId = null) {
-  if (!fileUri) {
-    throw new Error('No file selected for upload.');
-  }
+export async function uploadEvidence(formData) {
+  const targetUrl = `${BASE_URL}/api/v1/evidence`;
 
-  const targetUrl = `${BASE_URL}/api/v1/evidence/upload`;
+  console.log('[CINTRA API] Uploading evidence:', targetUrl);
 
-  const formData = new FormData();
-
-  formData.append('file', {
-    uri: fileUri,
-    name: fileName || 'evidence_file',
-    type: mimeType || 'application/octet-stream',
-  });
-
-  formData.append('type', evidenceType);
-  if (badgeId) {
-    formData.append('badge_id', badgeId);
-  }
-
-  let response;
   try {
-    response = await fetch(targetUrl, {
+    const response = await fetch(targetUrl, {
       method: 'POST',
       body: formData,
       headers: DEFAULT_HEADERS,
     });
+
+    if (!response.ok) {
+      console.error(
+        '[CINTRA API] Evidence upload failed:',
+        response.status
+      );
+
+      return null;
+    }
+
+    return await response.json();
   } catch (netErr) {
-    console.error('[CINTRA API] Evidence upload error:', netErr);
-    throw new Error(`Cannot connect to evidence server at ${targetUrl}`);
-  }
+    console.error(
+      '[CINTRA API] Evidence upload error:',
+      netErr
+    );
 
-  if (!response.ok) {
-    let errorMessage = `Upload failed with status ${response.status}.`;
-    try {
-      const errorData = await response.json();
-      if (errorData.detail) {
-        errorMessage = errorData.detail;
-      }
-    } catch (error) {}
-    throw new Error(errorMessage);
+    return null;
   }
-
-  return await response.json();
 }
-
-/**
- * Optional health-check function.
- */
-export async function checkBackendHealth() {
-  const response = await fetch(`${BASE_URL}/api/v1/health`, {
-    headers: DEFAULT_HEADERS,
-  });
-  if (!response.ok) {
-    throw new Error(`Backend health check failed with status ${response.status}.`);
-  }
-  return await response.json();
-}
-

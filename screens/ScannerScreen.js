@@ -26,7 +26,7 @@ import {
 } from '../services/authService';
 
 import { calculateSHA256 } from '../services/hashService';
-import { identifyFace, incrementGlobalScanCount, getGlobalScanCount } from '../services/api';
+import { identifyFace } from '../services/api';
 
 import ForensicWatermark from '../components/ForensicWatermark';
 import BiometricScanHUD from '../components/BiometricScanHUD';
@@ -53,8 +53,10 @@ export default function ScannerScreen({ navigation }) {
   const [isIdentifying, setIsIdentifying] =
     useState(false);
 
+  // Local scan number used only by the biometric HUD.
+  // It does NOT determine whether a face matches.
   const [scanCount, setScanCount] =
-    useState(getGlobalScanCount() || 0);
+    useState(0);
 
   const [scanResult, setScanResult] =
     useState(null);
@@ -90,8 +92,10 @@ export default function ScannerScreen({ navigation }) {
 
     try {
       setIsTakingPicture(true);
-      const nextCount = incrementGlobalScanCount();
-      setScanCount(nextCount);
+
+      // This number is only for the HUD.
+      // It is NOT used to decide Match / No Match.
+      setScanCount((count) => count + 1);
 
       let photoUri = null;
 
@@ -111,6 +115,7 @@ export default function ScannerScreen({ navigation }) {
       }
 
       setCapturedImage(photoUri);
+
       const sha256 = await calculateSHA256(photoUri);
       const currentUser = getCurrentUser();
 
@@ -124,16 +129,20 @@ export default function ScannerScreen({ navigation }) {
       setCapturedEvidence(evidence);
       updateActivity();
 
-      // Trigger high-tech biometric scan sequence
-      handleIdentify(photoUri, evidence, nextCount);
+      // Send the actual captured image to the backend.
+      await handleIdentify(photoUri, evidence);
 
     } catch (error) {
       console.error('Camera capture error:', error);
+
       const photoUri = 'demo_face.jpg';
+
       setCapturedImage(photoUri);
-      const nextCount = incrementGlobalScanCount();
-      setScanCount(nextCount);
-      handleIdentify(photoUri, null, nextCount);
+
+      // Try the backend with the fallback image.
+      // No artificial Match / No Match result is created.
+      await handleIdentify(photoUri, null);
+
     } finally {
       setIsTakingPicture(false);
     }
@@ -155,47 +164,72 @@ export default function ScannerScreen({ navigation }) {
   // IDENTIFY FACE
   // --------------------------------------------------
 
-  const handleIdentify = async (imageUri = capturedImage, evidenceObj = capturedEvidence, currentScanCount = scanCount) => {
-    const targetUri = imageUri || capturedImage || 'demo_face.jpg';
+  const handleIdentify = async (
+    imageUri = capturedImage,
+    evidenceObj = capturedEvidence
+  ) => {
+
+    const targetUri =
+      imageUri ||
+      capturedImage ||
+      'demo_face.jpg';
 
     try {
       setIsIdentifying(true);
+
+      console.log(
+        '[CINTRA Scanner] Sending image for identification...'
+      );
+
       const response = await identifyFace(targetUri);
+
+      console.log(
+        '[CINTRA Scanner] Backend identification result:',
+        response
+      );
+
+      // IMPORTANT:
+      // Always use the real backend response.
+      //
+      // The scan number is NOT used to determine
+      // whether a face matches.
       setScanResult(response);
 
     } catch (error) {
-      console.log('[CINTRA Scanner] Identification error:', error.message);
-      // Fallback response based on scanCount (Even scans 2nd, 4th = Match Found S004)
-      const isMatch = currentScanCount % 2 === 0 && currentScanCount > 0;
-      const response = isMatch
-        ? {
-            match: true,
-            suspect: {
-              suspect_id: 'S004',
-              name: 'Anvi Mishra',
-              role: 'Cyber Crime Suspect',
-              confidence: 98.7,
-              wanted: true,
-            },
-            message: 'MATCH FOUND',
-          }
-        : {
-            match: false,
-            suspect: null,
-            message: 'NO MATCH FOUND',
-          };
 
-      setScanResult(response);
+      console.log(
+        '[CINTRA Scanner] Identification error:',
+        error.message
+      );
+
+      // Never generate a fake Match Found result.
+      // If the backend cannot be reached, report that.
+      setScanResult({
+        match: false,
+        suspect: null,
+        message: 'Unable to connect to CINTRA backend',
+      });
+
+    } finally {
+      setIsIdentifying(false);
     }
   };
 
+  // --------------------------------------------------
+  // BIOMETRIC HUD COMPLETE
+  // --------------------------------------------------
+
   const handleHUDComplete = (res) => {
+
     setTimeout(() => {
+
       navigation.navigate('Result', {
         response: res || scanResult,
-        capturedImage: capturedImage || 'demo_face.jpg',
+        capturedImage:
+          capturedImage || 'demo_face.jpg',
         evidence: capturedEvidence,
       });
+
     }, 1400);
   };
 
@@ -271,14 +305,17 @@ export default function ScannerScreen({ navigation }) {
           style={styles.backHomeButton}
           onPress={() => navigation.goBack()}
         >
+
           <Ionicons
             name="arrow-back"
             size={20}
             color="#1976D2"
           />
+
           <Text style={styles.backHomeText}>
             RETURN TO HOME
           </Text>
+
         </TouchableOpacity>
 
       </View>
@@ -291,9 +328,11 @@ export default function ScannerScreen({ navigation }) {
   // --------------------------------------------------
 
   return (
+
     <View style={styles.container}>
 
       {/* Live Camera Feed */}
+
       <CameraView
         ref={cameraRef}
         style={styles.camera}
@@ -302,69 +341,140 @@ export default function ScannerScreen({ navigation }) {
         onCameraReady={() => setCameraReady(true)}
       />
 
+
       {/* Captured Image Preview */}
+
       {capturedImage && (
+
         <Image
           source={{ uri: capturedImage }}
           style={styles.capturedImage}
           resizeMode="cover"
         />
+
       )}
 
+
       {/* Biometric Security Scanning HUD Overlay */}
+
       <BiometricScanHUD
-        isScanning={isIdentifying || !!capturedImage}
+        isScanning={
+          isIdentifying ||
+          !!capturedImage
+        }
+
         onScanComplete={handleHUDComplete}
+
+        // Used only by the HUD.
+        // It does NOT decide Match / No Match.
         scanCount={scanCount}
+
+        // This contains the REAL backend response.
         mockResult={scanResult}
       />
 
+
       {/* Forensic Watermark Overlay */}
+
       <ForensicWatermark
-        badgeId={capturedEvidence?.badgeId || getCurrentUser()?.badgeId}
-        capturedAt={capturedEvidence?.capturedAt}
+        badgeId={
+          capturedEvidence?.badgeId ||
+          getCurrentUser()?.badgeId
+        }
+
+        capturedAt={
+          capturedEvidence?.capturedAt
+        }
       />
 
+
       {/* Top Navigation */}
+
       <View style={styles.topSection}>
+
         <TouchableOpacity
           style={styles.topBackButton}
           onPress={() => navigation.goBack()}
         >
-          <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+
+          <Ionicons
+            name="arrow-back"
+            size={24}
+            color="#FFFFFF"
+          />
+
         </TouchableOpacity>
+
       </View>
 
+
       {/* Bottom Controls */}
+
       <View style={styles.bottomSection}>
+
         {capturedImage ? (
+
           <View style={styles.actionRow}>
+
             <TouchableOpacity
               style={styles.secondaryButton}
               onPress={retakePicture}
               activeOpacity={0.7}
             >
-              <Ionicons name="refresh" size={20} color="#1976D2" />
-              <Text style={styles.secondaryButtonText}>RESCAN</Text>
+
+              <Ionicons
+                name="refresh"
+                size={20}
+                color="#1976D2"
+              />
+
+              <Text style={styles.secondaryButtonText}>
+                RESCAN
+              </Text>
+
             </TouchableOpacity>
+
           </View>
+
         ) : (
+
           <TouchableOpacity
             style={[
               styles.scanButton,
-              (!cameraReady || isTakingPicture) && styles.disabledButton,
+              (
+                !cameraReady ||
+                isTakingPicture
+              ) &&
+              styles.disabledButton,
             ]}
             onPress={takePicture}
-            disabled={!cameraReady || isTakingPicture}
+            disabled={
+              !cameraReady ||
+              isTakingPicture
+            }
             activeOpacity={0.7}
           >
-            <Ionicons name="scan-outline" size={25} color="#FFFFFF" />
+
+            <Ionicons
+              name="scan-outline"
+              size={25}
+              color="#FFFFFF"
+            />
+
             <Text style={styles.scanButtonText}>
-              {isTakingPicture ? 'INITIATING...' : 'START SCAN'}
+              {
+                isTakingPicture
+                  ? 'INITIATING...'
+                  : 'START SCAN'
+              }
             </Text>
+
           </TouchableOpacity>
+
         )}
+
       </View>
+
     </View>
   );
 }
@@ -621,4 +731,3 @@ const styles = StyleSheet.create({
     marginLeft: 7,
   },
 });
-
