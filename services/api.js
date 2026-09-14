@@ -5,14 +5,8 @@ import Constants from 'expo-constants';
 const PORT = 8000;
 
 // Backend IP address.
-//
-// If EXPO_PUBLIC_BACKEND_IP is defined in a .env file,
-// Expo will use that value.
-//
-// Otherwise, this falls back to the IP currently used
-// on your computer so your existing setup keeps working.
 const BACKEND_IP =
-  process.env.EXPO_PUBLIC_BACKEND_IP || '10.61.0.174';
+  process.env.EXPO_PUBLIC_BACKEND_IP || '10.61.13.135';
 
 const getBaseUrl = () => {
   return `http://${BACKEND_IP}:${PORT}`;
@@ -68,7 +62,7 @@ export async function identifyFace(imageUri) {
 
     const timeoutId = setTimeout(() => {
       controller.abort();
-    }, 10000);
+    }, 30000);
 
     const response = await fetch(targetUrl, {
       method: 'POST',
@@ -93,20 +87,38 @@ export async function identifyFace(imageUri) {
     );
 
     return {
-      match: false,
+      match: null,
       suspect: null,
       message: 'Backend request failed',
+      error: true,
     };
+
   } catch (netErr) {
+    clearTimeout(timeoutId);
+
+    if (netErr.name === 'AbortError') {
+      console.error(
+        '[CINTRA API] Request timed out after 30 seconds.'
+      );
+
+      return {
+        match: null,
+        suspect: null,
+        message: 'Backend request timed out',
+        error: true,
+      };
+    }
+
     console.error(
       '[CINTRA API] Network fetch error:',
       netErr.message
     );
 
     return {
-      match: false,
+      match: null,
       suspect: null,
       message: 'Unable to connect to CINTRA backend',
+      error: true,
     };
   }
 }
@@ -135,6 +147,7 @@ export async function getSuspect(suspectId) {
     }
 
     return await response.json();
+
   } catch (netErr) {
     console.error(
       '[CINTRA API] Suspect search error:',
@@ -170,6 +183,7 @@ export async function uploadEvidence(formData) {
     }
 
     return await response.json();
+
   } catch (netErr) {
     console.error(
       '[CINTRA API] Evidence upload error:',
