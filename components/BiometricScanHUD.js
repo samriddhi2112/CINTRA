@@ -27,6 +27,12 @@ export default function BiometricScanHUD({
   const [progress, setProgress] = useState(0);
   const [resultData, setResultData] = useState(null);
 
+  // Tracks whether the 4.5 second visual processing window has finished.
+  const processingFinishedRef = useRef(false);
+
+  // Prevents the final result from being shown more than once.
+  const resultShownRef = useRef(false);
+
   // Animations
   const scanLineAnim = useRef(new Animated.Value(0)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -103,16 +109,95 @@ export default function BiometricScanHUD({
   };
 
   // ---------------------------------------------------------
-  // Trigger scan sequence when isScanning changes to true
+  // Show the REAL backend result
+  // ---------------------------------------------------------
+  const showBackendResult = (res) => {
+    if (resultShownRef.current) {
+      return;
+    }
+
+    if (
+      !res ||
+      typeof res.match !== 'boolean'
+    ) {
+      return;
+    }
+
+    resultShownRef.current = true;
+
+    console.log(
+      '[CINTRA HUD] Showing backend result:',
+      res
+    );
+
+    setProgress(100);
+    setResultData(res);
+
+    // -------------------------------------------------------
+    // MATCH
+    // -------------------------------------------------------
+    if (res.match === true) {
+      transitionState('MATCH FOUND');
+
+      Animated.parallel([
+        Animated.timing(glowIntensityAnim, {
+          toValue: 1.0,
+          duration: 400,
+          useNativeDriver: false,
+        }),
+
+        Animated.sequence([
+          Animated.timing(matchPulseAnim, {
+            toValue: 1,
+            duration: 300,
+            useNativeDriver: true,
+          }),
+
+          Animated.timing(matchPulseAnim, {
+            toValue: 0.6,
+            duration: 500,
+            useNativeDriver: true,
+          }),
+        ]),
+      ]).start();
+    }
+
+    // -------------------------------------------------------
+    // NO MATCH
+    // -------------------------------------------------------
+    else {
+      transitionState('NO MATCH FOUND');
+
+      Animated.timing(glowIntensityAnim, {
+        toValue: 0.2,
+        duration: 300,
+        useNativeDriver: false,
+      }).start();
+    }
+
+    // Tell ScannerScreen that the scan has completed.
+    if (onScanComplete) {
+      onScanComplete(res);
+    }
+  };
+
+  // ---------------------------------------------------------
+  // Trigger scan sequence when isScanning changes
   // ---------------------------------------------------------
   useEffect(() => {
-    if (!isScanning) return;
+    if (!isScanning) {
+      return;
+    }
 
     let isMounted = true;
 
     // Reset state for a new scan
+    processingFinishedRef.current = false;
+    resultShownRef.current = false;
+
     setProgress(0);
     setResultData(null);
+
     matchPulseAnim.setValue(0);
     glowIntensityAnim.setValue(0.4);
 
@@ -149,108 +234,50 @@ export default function BiometricScanHUD({
     }, 3000);
 
     // -------------------------------------------------------
-    // Step 4: FINAL RESULT
+    // Step 4: 4.5 SECOND PROCESSING WINDOW
+    // -------------------------------------------------------
     //
     // IMPORTANT:
-    // The result comes from mockResult, which is actually the
-    // backend response passed from ScannerScreen.
     //
-    // There is NO scan-count based fake result anymore.
-    // There is NO hardcoded suspect.
-    // There is NO hardcoded confidence.
-    // -------------------------------------------------------
+    // We DO NOT create a fake NO MATCH result anymore.
+    //
+    // At 4.5 seconds:
+    //
+    //   Backend already responded
+    //       -> show backend result
+    //
+    //   Backend has NOT responded
+    //       -> remain on VERIFYING MATCH
+    //
+    // When the backend eventually responds:
+    //       -> show the real backend result
+    //
     const t5 = setTimeout(() => {
       if (!isMounted) return;
 
+      processingFinishedRef.current = true;
+
       setProgress(100);
 
-      // Use the REAL backend result.
-      //
-      // Expected backend format:
-      //
-      // {
-      //   match: true,
-      //   suspect: {
-      //     suspect_id: "S004",
-      //     name: "Anvi Mishra",
-      //     role: "Cyber Crime Suspect",
-      //     confidence: 77.1,
-      //     wanted: true
-      //   },
-      //   message: "Match Found"
-      // }
-      //
-      // OR:
-      //
-      // {
-      //   match: false,
-      //   suspect: null,
-      //   message: "No Match Found"
-      // }
-
-      const res =
-        mockResult &&
-        typeof mockResult.match === 'boolean'
-          ? mockResult
-          : {
-              match: false,
-              suspect: null,
-              message: 'NO MATCH FOUND',
-            };
-
       console.log(
-        '[CINTRA HUD] Using backend result:',
-        res
+        '[CINTRA HUD] 4.5 second processing window finished.'
       );
 
-      setResultData(res);
+      // If backend result is already available,
+      // show it now.
+      if (
+        mockResult &&
+        typeof mockResult.match === 'boolean'
+      ) {
+        showBackendResult(mockResult);
+      } else {
+        // Backend is still processing.
+        // DO NOT show NO MATCH.
+        console.log(
+          '[CINTRA HUD] Backend result not ready. Waiting...'
+        );
 
-      // -----------------------------------------------------
-      // MATCH
-      // -----------------------------------------------------
-      if (res.match) {
-        transitionState('MATCH FOUND');
-
-        // Trigger match pulse ring
-        Animated.parallel([
-          Animated.timing(glowIntensityAnim, {
-            toValue: 1.0,
-            duration: 400,
-            useNativeDriver: false,
-          }),
-
-          Animated.sequence([
-            Animated.timing(matchPulseAnim, {
-              toValue: 1,
-              duration: 300,
-              useNativeDriver: true,
-            }),
-
-            Animated.timing(matchPulseAnim, {
-              toValue: 0.6,
-              duration: 500,
-              useNativeDriver: true,
-            }),
-          ]),
-        ]).start();
-      }
-
-      // -----------------------------------------------------
-      // NO MATCH
-      // -----------------------------------------------------
-      else {
-        transitionState('NO MATCH FOUND');
-
-        Animated.timing(glowIntensityAnim, {
-          toValue: 0.2,
-          duration: 300,
-          useNativeDriver: false,
-        }).start();
-      }
-
-      // Tell ScannerScreen that the scan has completed
-      if (onScanComplete) {
-        onScanComplete(res);
+        transitionState('VERIFYING MATCH');
       }
     }, 4500);
 
@@ -265,12 +292,62 @@ export default function BiometricScanHUD({
       clearTimeout(t3);
       clearTimeout(t5);
     };
-  }, [isScanning, mockResult]);
+  }, [isScanning]);
+
+  // ---------------------------------------------------------
+  // Handle backend result arriving
+  // ---------------------------------------------------------
+  //
+  // This effect is separate from the 4.5 second timer.
+  //
+  // This is what fixes the original problem:
+  //
+  // If the backend takes longer than 4.5 seconds, the HUD
+  // waits instead of incorrectly displaying NO MATCH FOUND.
+  //
+  useEffect(() => {
+    if (!isScanning) {
+      return;
+    }
+
+    if (
+      !processingFinishedRef.current ||
+      resultShownRef.current
+    ) {
+      return;
+    }
+
+    if (
+      !mockResult ||
+      typeof mockResult.match !== 'boolean'
+    ) {
+      return;
+    }
+
+    console.log(
+      '[CINTRA HUD] Backend result arrived after processing window.'
+    );
+
+    showBackendResult(mockResult);
+  }, [mockResult, isScanning]);
+
+  // ---------------------------------------------------------
+  // Reset HUD when scanning stops
+  // ---------------------------------------------------------
+  useEffect(() => {
+    if (isScanning) {
+      return;
+    }
+
+    processingFinishedRef.current = false;
+    resultShownRef.current = false;
+  }, [isScanning]);
 
   // ---------------------------------------------------------
   // Determine current visual state
   // ---------------------------------------------------------
-  const isMatchFound = scanState === 'MATCH FOUND';
+  const isMatchFound =
+    scanState === 'MATCH FOUND';
 
   const isNoMatch =
     scanState === 'NO MATCH' ||
